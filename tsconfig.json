@@ -26,5 +26,10 @@
 	},
 	"include": [
 		"src/**/*.ts"
+	],
+	"exclude": [
+		"src/**/*.test.ts",
+		"src/**/__tests__",
+		"__mocks__"
 	]
 }

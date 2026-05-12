@@ -61,14 +61,14 @@ export class CanvasAcpSettingTab extends PluginSettingTab {
 				.setPlaceholder("420")
 				.setValue(String(this.plugin.settings.nodeWidth))
 				.onChange(async (value) => {
-					this.plugin.settings.nodeWidth = Math.max(160, Number(value) || DEFAULT_SETTINGS.nodeWidth);
+					this.plugin.settings.nodeWidth = parseNodeSize(value, 160, DEFAULT_SETTINGS.nodeWidth);
 					await this.plugin.saveSettings();
 				}))
 			.addText((text) => text
 				.setPlaceholder("260")
 				.setValue(String(this.plugin.settings.nodeHeight))
 				.onChange(async (value) => {
-					this.plugin.settings.nodeHeight = Math.max(120, Number(value) || DEFAULT_SETTINGS.nodeHeight);
+					this.plugin.settings.nodeHeight = parseNodeSize(value, 120, DEFAULT_SETTINGS.nodeHeight);
 					await this.plugin.saveSettings();
 				}));
 
@@ -82,4 +82,8 @@ export class CanvasAcpSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 	}
+}
+
+export function parseNodeSize(value: string, min: number, fallback: number): number {
+	return Math.max(min, Number(value) || fallback);
 }

@@ -26,10 +26,7 @@ export default class CanvasAcpPlugin extends Plugin {
 				}
 
 				if (!checking) {
-					void askQuestionFromCanvasSelection(this.app, this.settings).catch((error) => {
-						debugError("command", "failed from command palette", error);
-						new Notice(error instanceof Error ? error.message : "Canvas ACP failed.");
-					});
+					void askQuestionFromCanvasSelection(this.app, this.settings).catch(handleCommandError("command palette"));
 				}
 
 				return true;
@@ -38,10 +35,7 @@ export default class CanvasAcpPlugin extends Plugin {
 
 		this.addRibbonIcon("message-square-plus", "Ask question about canvas node", () => {
 			debugLog("command", "ribbon command invoked");
-			void askQuestionFromCanvasSelection(this.app, this.settings).catch((error) => {
-				debugError("command", "failed from ribbon", error);
-				new Notice(error instanceof Error ? error.message : "Canvas ACP failed.");
-			});
+			void askQuestionFromCanvasSelection(this.app, this.settings).catch(handleCommandError("ribbon"));
 		});
 
 		this.addSettingTab(new CanvasAcpSettingTab(this.app, this));
@@ -57,6 +51,13 @@ export default class CanvasAcpPlugin extends Plugin {
 		setCanvasAcpDebugLogging(this.settings.debugLogging);
 		debugLog("settings", "saved", summarizeSettings(this.settings));
 	}
+}
+
+function handleCommandError(source: string) {
+	return (error: unknown) => {
+		debugError("command", `failed from ${source}`, error);
+		new Notice(error instanceof Error ? error.message : "Canvas ACP failed.");
+	};
 }
 
 function summarizeSettings(settings: CanvasAcpSettings) {

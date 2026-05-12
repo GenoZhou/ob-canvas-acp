@@ -104,8 +104,8 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 	const selectedNodes = data.nodes.filter((node) => selectedIds.has(node.id) || (node.file && selectedFiles.has(node.file)));
 	let sourceNodes = selectedNodes.filter((node) => isSupportedSourceNode(node) || node.type === "group");
 	debugLog("selection", "source node filter result", {
-		selectedNodes: selectedNodes.map(summarizeNode),
-		sourceNodes: sourceNodes.map(summarizeNode),
+		selectedNodes: selectedNodes.map(summarizePartialNode),
+		sourceNodes: sourceNodes.map(summarizePartialNode),
 	});
 
 	if (sourceNodes.length !== 1) {
@@ -194,7 +194,7 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 		};
 	}
 
-	debugLog("selection", "resolved text source", summarizeNode(selectedNode));
+	debugLog("selection", "resolved text source", summarizePartialNode(selectedNode));
 	return {
 		canvasPath: canvasFile.path,
 		sourceText: selectedNode.text ?? "",
@@ -262,16 +262,8 @@ function getCanvasSelection(view: CanvasViewLike, app: App): {selectedIds: Set<s
 	});
 
 	for (const item of selectedItems) {
-		addDefined(selectedIds, item.data?.id);
-		addDefined(selectedIds, item.child?.id);
-		addDefined(selectedIds, item.node?.id);
-		addDefined(selectedIds, item.id);
-
-		addDefined(selectedFiles, item.data?.file);
-		addDefined(selectedFiles, item.child?.file);
-		addDefined(selectedFiles, item.node?.file);
-		addDefined(selectedFiles, item.file);
-		addDefined(selectedFiles, item.path);
+		addDefined(selectedIds, item.data?.id, item.child?.id, item.node?.id, item.id);
+		addDefined(selectedFiles, item.data?.file, item.child?.file, item.node?.file, item.file, item.path);
 	}
 
 	const selectedElements = Array.from(view.containerEl?.querySelectorAll(".canvas-node.is-selected, .canvas-node.mod-selected, .canvas-node.is-focused, .canvas-group.is-selected, .canvas-group.mod-selected, .canvas-group.is-focused") ?? []);
@@ -288,10 +280,8 @@ function getCanvasSelection(view: CanvasViewLike, app: App): {selectedIds: Set<s
 
 	for (const element of selectedElements) {
 		if (element instanceof HTMLElement) {
-			addDefined(selectedIds, element.dataset.nodeId);
-			addDefined(selectedIds, element.dataset.id);
-			addDefined(selectedFiles, element.dataset.path);
-			addDefined(selectedFiles, element.dataset.file);
+			addDefined(selectedIds, element.dataset.nodeId, element.dataset.id);
+			addDefined(selectedFiles, element.dataset.path, element.dataset.file);
 		}
 	}
 
@@ -307,9 +297,11 @@ function getCanvasSelection(view: CanvasViewLike, app: App): {selectedIds: Set<s
 	return {selectedIds, selectedFiles};
 }
 
-function addDefined(values: Set<string>, value: string | undefined) {
-	if (value) {
-		values.add(value);
+function addDefined(values: Set<string>, ...items: Array<string | undefined>) {
+	for (const value of items) {
+		if (value) {
+			values.add(value);
+		}
 	}
 }
 
@@ -366,7 +358,7 @@ export async function addStreamingTextNodeToCanvas(
 
 	data.nodes.push(targetNode);
 	debugLog("canvas-write", "new text node and edges prepared", {
-		targetNode: summarizeNode(targetNode),
+		targetNode: summarizePartialNode(targetNode),
 		edgeCount: data.edges.length,
 	});
 
@@ -497,20 +489,6 @@ function createCanvasId(): string {
 	const bytes = new Uint8Array(8);
 	crypto.getRandomValues(bytes);
 	return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function summarizeNode(node: CanvasNodeData) {
-	return {
-		id: node.id,
-		type: node.type,
-		file: node.file,
-		textLength: node.text?.length,
-		textPreview: node.text?.slice(0, 120),
-		x: node.x,
-		y: node.y,
-		width: node.width,
-		height: node.height,
-	};
 }
 
 function summarizeSelectionItem(item: CanvasSelectionItem) {

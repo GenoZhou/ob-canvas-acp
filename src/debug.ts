@@ -4,28 +4,39 @@ export function setCanvasAcpDebugLogging(enabled: boolean) {
 	debugLoggingEnabled = enabled;
 }
 
-export function debugLog(scope: string, message: string, data?: unknown) {
-	if (!debugLoggingEnabled) {
-		return;
-	}
+type DebugLevel = "log" | "warn" | "error";
 
-	console.debug(`[Canvas ACP][${scope}] ${message}`, sanitizeDebugData(data));
+export function debugLog(scope: string, message: string, data?: unknown) {
+	dispatchDebug("log", scope, message, data);
 }
 
 export function debugWarn(scope: string, message: string, data?: unknown) {
-	if (!debugLoggingEnabled) {
-		return;
-	}
-
-	console.warn(`[Canvas ACP][${scope}] ${message}`, sanitizeDebugData(data));
+	dispatchDebug("warn", scope, message, data);
 }
 
 export function debugError(scope: string, message: string, error: unknown) {
+	dispatchDebug("error", scope, message, error);
+}
+
+function dispatchDebug(level: DebugLevel, scope: string, message: string, data?: unknown) {
 	if (!debugLoggingEnabled) {
 		return;
 	}
 
-	console.error(`[Canvas ACP][${scope}] ${message}`, sanitizeDebugData(error));
+	const sanitized = sanitizeDebugData(data);
+	const prefix = `[Canvas ACP][${scope}] ${message}`;
+
+	switch (level) {
+		case "warn":
+			console.warn(prefix, sanitized);
+			break;
+		case "error":
+			console.error(prefix, sanitized);
+			break;
+		default:
+			console.debug(prefix, sanitized);
+			break;
+	}
 }
 
 function sanitizeDebugData(data: unknown): unknown {
@@ -67,7 +78,7 @@ function sanitizeDebugDataInner(data: unknown, seen: WeakSet<object>): unknown {
 	return data;
 }
 
-function summarizeText(text: string): {length: number; preview: string} {
+export function summarizeText(text: string): {length: number; preview: string} {
 	return {
 		length: text.length,
 		preview: text.slice(0, 160),

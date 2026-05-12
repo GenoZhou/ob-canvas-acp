@@ -115,7 +115,7 @@ export class AcpClient {
 					sessionId: session.sessionId,
 					blockCount: 1 + resources.length,
 				});
-				response = await this.prompt(session.sessionId, buildPromptBlocks(prompt, resources), onChunk) as {stopReason?: string};
+				response = await this.prompt(session.sessionId, buildPromptBlocks(prompt, safeResources), onChunk) as {stopReason?: string};
 			} catch (error) {
 				if (!(error instanceof JsonRpcError) || !error.isInvalidParams()) {
 					debugError("acp", "session prompt failed", error);
@@ -126,7 +126,7 @@ export class AcpClient {
 				this.chunks = [];
 				response = await this.prompt(session.sessionId, [{
 					type: "text",
-					text: buildTextOnlyPrompt(prompt, resources),
+					text: buildTextOnlyPrompt(prompt, safeResources),
 				}], onChunk) as {stopReason?: string};
 			}
 
@@ -220,7 +220,11 @@ export class AcpClient {
 			this.buffer = this.buffer.slice(newlineIndex + 1);
 
 			if (line) {
-				this.handleMessage(JSON.parse(line) as JsonRpcResponse | JsonRpcNotification);
+				try {
+					this.handleMessage(JSON.parse(line) as JsonRpcResponse | JsonRpcNotification);
+				} catch (parseError) {
+					debugWarn("acp-rpc", "discarding non-JSON line from agent", line);
+				}
 			}
 
 			newlineIndex = this.buffer.indexOf("\n");
@@ -366,7 +370,7 @@ class JsonRpcError extends Error {
 	}
 }
 
-function buildPromptBlocks(prompt: string, resources: Array<{uri: string; text: string; mimeType: string}>): unknown[] {
+export function buildPromptBlocks(prompt: string, resources: Array<{uri: string; text: string; mimeType: string}>): unknown[] {
 	return [
 		{text: prompt, type: "text"},
 		...resources.map((resource) => ({
@@ -376,7 +380,7 @@ function buildPromptBlocks(prompt: string, resources: Array<{uri: string; text: 
 	];
 }
 
-function buildTextOnlyPrompt(prompt: string, resources: Array<{uri: string; text: string; mimeType: string}>): string {
+export function buildTextOnlyPrompt(prompt: string, resources: Array<{uri: string; text: string; mimeType: string}>): string {
 	if (resources.length === 0) {
 		return prompt;
 	}

@@ -252,16 +252,6 @@ class AskQuestionModal extends Modal {
 	}
 }
 
-function appendTextElement(parent: HTMLElement, tagName: keyof HTMLElementTagNameMap, text: string, cls?: string): HTMLElement {
-	const element = document.createElement(tagName);
-	element.textContent = text;
-	if (cls) {
-		element.addClass(cls);
-	}
-	parent.appendChild(element);
-	return element;
-}
-
 function createThrottledCanvasUpdate(app: App, target: CanvasTextNodeTarget): {
 	schedule: (text: string) => void;
 	flush: () => Promise<void>;
@@ -278,7 +268,7 @@ function createThrottledCanvasUpdate(app: App, target: CanvasTextNodeTarget): {
 			canvasPath: target.canvasPath,
 			textLength: textToWrite.length,
 		});
-		lastWrite = lastWrite.then(() => updateCanvasTextNode(app, target, textToWrite));
+		lastWrite = lastWrite.catch(() => undefined).then(() => updateCanvasTextNode(app, target, textToWrite));
 	};
 
 	return {
@@ -303,7 +293,7 @@ function createThrottledCanvasUpdate(app: App, target: CanvasTextNodeTarget): {
 	};
 }
 
-function buildPrompt(selection: SelectedCanvasSource, question: string, includeThinking: boolean): string {
+export function buildPrompt(selection: SelectedCanvasSource, question: string, includeThinking: boolean): string {
 	const parts = [
 		"You are helping expand an Obsidian canvas graph.",
 		"Answer the user's question using the provided canvas node as context.",
@@ -330,16 +320,12 @@ function buildPrompt(selection: SelectedCanvasSource, question: string, includeT
 	return parts.join("\n");
 }
 
-function getSourceUri(selection: SelectedCanvasSource, basePath: string): string {
+export function getSourceUri(selection: SelectedCanvasSource, basePath: string): string {
 	if (selection.sourceFile) {
 		return encodeURI(`file://${basePath}/${selection.sourceFile.path}`);
 	}
 
 	return encodeURI(selection.sourceUri ?? "canvas://unknown");
-}
-
-function getSelectionLabel(selection: SelectedCanvasSource): string {
-	return selection.sourceFile?.path ?? (selection.sourceTitle || selection.sourceUri || "Canvas node");
 }
 
 function getVaultBasePath(app: App): string {
@@ -353,7 +339,7 @@ function getVaultBasePath(app: App): string {
 	return basePath;
 }
 
-function summarizeSelection(selection: SelectedCanvasSource) {
+export function summarizeSelection(selection: SelectedCanvasSource) {
 	const sourceText = selection.sourceText ?? "";
 	const upstreamContext = selection.upstreamContext ?? "";
 	return {
