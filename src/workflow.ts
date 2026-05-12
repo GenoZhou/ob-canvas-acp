@@ -64,7 +64,10 @@ class AskQuestionModal extends Modal {
 		this.updateSubmitState();
 		const question = this.question;
 		const promptTextarea = this.contentEl.querySelector(".canvas-acp-prompt") as HTMLTextAreaElement | null;
-		this.promptPreview = promptTextarea?.value ?? "";
+		const rawPreview = promptTextarea?.value ?? "";
+		const divider = "\n\n--- Context ---\n";
+		const dividerIndex = rawPreview.indexOf(divider);
+		this.promptPreview = dividerIndex !== -1 ? rawPreview.slice(0, dividerIndex).trim() : rawPreview.trim();
 		debugLog("modal", "submit", {
 			questionLength: question.length,
 			questionPreview: question.slice(0, 160),
@@ -173,11 +176,10 @@ class AskQuestionModal extends Modal {
 
 		debugLog("modal", "render stats");
 		const stats = contentEl.createDiv({cls: "canvas-acp-stats"});
-		const selectedCount = this.canvasSource.allSourceNodeIds?.length ?? 1;
 		const upstreamCount = this.canvasSource.upstreamNodeCount ?? 0;
 		const sourceLen = this.canvasSource.sourceText?.length ?? 0;
 		const upstreamLen = this.canvasSource.upstreamContext?.length ?? 0;
-		stats.setText(`${selectedCount} selected | ${upstreamCount} upstream | ${sourceLen + upstreamLen} chars`);
+		stats.setText(`${upstreamCount} upstream | ${sourceLen + upstreamLen} chars`);
 
 		debugLog("modal", "render input");
 		const input = document.createElement("input");
@@ -189,9 +191,12 @@ class AskQuestionModal extends Modal {
 		promptTextarea.rows = 6;
 		promptTextarea.classList.add("canvas-acp-prompt");
 
+		const contextDivider = "\n\n--- Context ---\n";
 		const updatePrompt = () => {
-			this.promptPreview = buildPrompt(this.canvasSource, this.question, this.includeThinking);
-			promptTextarea.value = this.promptPreview;
+			const prompt = buildPrompt(this.canvasSource, this.question, this.includeThinking);
+			const context = this.canvasSource.sourceText ?? "";
+			this.promptPreview = prompt;
+			promptTextarea.value = [prompt, contextDivider, context].join("");
 		};
 
 		input.addEventListener("input", () => {
@@ -299,15 +304,12 @@ function createThrottledCanvasUpdate(app: App, target: CanvasTextNodeTarget): {
 }
 
 function buildPrompt(selection: SelectedCanvasSource, question: string, includeThinking: boolean): string {
-	const isMulti = (selection.allSourceNodeIds?.length ?? 1) > 1;
 	const parts = [
 		"You are helping expand an Obsidian canvas graph.",
-		isMulti
-			? "The user has selected multiple canvas nodes. Answer the question using all of them as context."
-			: "Answer the user's question using the provided canvas node as context.",
+		"Answer the user's question using the provided canvas node as context.",
 	];
 
-	if (!isMulti && selection.upstreamContext) {
+	if (selection.upstreamContext) {
 		parts.push("");
 		parts.push("The following upstream nodes also connect to the source node and may provide additional context:");
 		parts.push(selection.upstreamContext);
@@ -362,7 +364,6 @@ function summarizeSelection(selection: SelectedCanvasSource) {
 		sourceNodeId: selection.sourceNodeId,
 		sourceTextLength: sourceText.length,
 		sourceTextPreview: sourceText.slice(0, 160),
-		selectedNodeCount: selection.allSourceNodeIds?.length ?? 1,
 		upstreamNodeCount: selection.upstreamNodeCount,
 		upstreamContextLength: upstreamContext.length,
 		upstreamContextPreview: upstreamContext.slice(0, 160),

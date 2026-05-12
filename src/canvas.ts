@@ -11,6 +11,7 @@ interface CanvasNodeData {
 	height: number;
 	file?: string;
 	text?: string;
+	label?: string;
 }
 
 interface CanvasEdgeData {
@@ -101,54 +102,53 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 	});
 
 	const selectedNodes = data.nodes.filter((node) => selectedIds.has(node.id) || (node.file && selectedFiles.has(node.file)));
-	const sourceNodes = selectedNodes.filter((node) => isSupportedSourceNode(node));
+	const sourceNodes = selectedNodes.filter((node) => isSupportedSourceNode(node) || node.type === "group");
 	debugLog("selection", "source node filter result", {
 		selectedNodes: selectedNodes.map(summarizeNode),
 		sourceNodes: sourceNodes.map(summarizeNode),
 	});
 
-	if (sourceNodes.length === 0) {
-		throw new Error(`Select at least one note or text node on the active canvas. Found 0.`);
+	if (sourceNodes.length !== 1) {
+		throw new Error(`Select exactly one note, text, or group node on the active canvas. Found ${sourceNodes.length}.`);
 	}
 
-	if (sourceNodes.length === 1) {
-		const selectedNode = sourceNodes[0]!;
-		const upstreamContext = await getUpstreamContext(app, data, selectedNode);
-		const upstreamNodeCount = data.edges.filter((edge) => edge.toNode === selectedNode.id).length;
-		debugLog("selection", "upstream context resolved", {
-			upstreamNodeCount,
-			upstreamContextLength: upstreamContext.length,
-		});
+	const selectedNode = sourceNodes[0]!;
 
-		if (selectedNode.type === "file") {
-			if (!selectedNode.file) {
-				throw new Error("The selected note node does not point to a note.");
-			}
+	if (selectedNode.type === "group") {
+		const groupNodes = data.nodes.filter((node) =>
+			node.id !== selectedNode.id &&
+			isSupportedSourceNode(node) &&
+			isNodeInGroup(node, selectedNode),
+		);
 
-			const sourceFile = app.vault.getAbstractFileByPath(selectedNode.file);
-			if (!(sourceFile instanceof TFile)) {
-				throw new Error("The selected note node does not point to an existing note.");
-			}
-
-			return {
-				canvasPath: canvasFile.path,
-				sourceFile,
-				sourceText: await app.vault.read(sourceFile),
-				sourceTitle: sourceFile.basename,
-				sourceUri: `vault://${sourceFile.path}`,
-				sourceNodeId: selectedNode.id,
-				view,
-				upstreamContext,
-				upstreamNodeCount,
-				allSourceNodeIds: [selectedNode.id],
-			};
+		if (groupNodes.length === 0) {
+			throw new Error("The selected group does not contain any note or text nodes.");
 		}
 
-		debugLog("selection", "resolved text source", summarizeNode(selectedNode));
+		const texts: string[] = [];
+		for (const node of groupNodes) {
+			if (node.type === "file" && node.file) {
+				const file = app.vault.getAbstractFileByPath(node.file);
+				if (file instanceof TFile) {
+					texts.push(`Note [[${file.basename}]]:\n${await app.vault.read(file)}`);
+				}
+			} else if (node.type === "text") {
+				texts.push(`Text node:\n${node.text ?? ""}`);
+			}
+		}
+
+		const upstreamContext = await getUpstreamContext(app, data, selectedNode);
+		const upstreamNodeCount = data.edges.filter((edge) => edge.toNode === selectedNode.id).length;
+		debugLog("selection", "resolved group source", {
+			groupLabel: selectedNode.label,
+			groupNodeCount: groupNodes.length,
+			combinedTextLength: texts.join("\n\n").length,
+		});
+
 		return {
 			canvasPath: canvasFile.path,
-			sourceText: selectedNode.text ?? "",
-			sourceTitle: firstTextLine(selectedNode.text) || "Canvas text",
+			sourceText: texts.join("\n\n---\n\n"),
+			sourceTitle: selectedNode.label || "Group",
 			sourceUri: `canvas://${canvasFile.path}#${selectedNode.id}`,
 			sourceNodeId: selectedNode.id,
 			view,
@@ -158,58 +158,62 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 		};
 	}
 
-	// Multi-select
-	const primaryNode = sourceNodes[0]!;
-	const allNodeIds = sourceNodes.map((n) => n.id);
-	const excludeSet = new Set(allNodeIds);
-
-	const texts: string[] = [];
-	const upstreamParts: string[] = [];
-	const seenUpstream = new Set<string>();
-	let totalUpstreamCount = 0;
-
-	for (const node of sourceNodes) {
-		if (node.type === "file" && node.file) {
-			const file = app.vault.getAbstractFileByPath(node.file);
-			if (file instanceof TFile) {
-				texts.push(`Note [[${file.basename}]]:\n${await app.vault.read(file)}`);
-			}
-		} else if (node.type === "text") {
-			texts.push(`Text node:\n${node.text ?? ""}`);
-		}
-
-		const ctx = await getUpstreamContext(app, data, node, excludeSet);
-		if (ctx && !seenUpstream.has(ctx)) {
-			seenUpstream.add(ctx);
-			upstreamParts.push(ctx);
-		}
-		totalUpstreamCount += data.edges.filter((edge) => edge.toNode === node.id).length;
-	}
-
-	const combinedText = texts.join("\n\n---\n\n");
-	const upstreamContext = upstreamParts.join("\n\n");
-
-	debugLog("selection", "resolved multi source", {
-		nodeCount: sourceNodes.length,
-		totalUpstreamCount,
-		combinedTextLength: combinedText.length,
+	const upstreamContext = await getUpstreamContext(app, data, selectedNode);
+	const upstreamNodeCount = data.edges.filter((edge) => edge.toNode === selectedNode.id).length;
+	debugLog("selection", "upstream context resolved", {
+		upstreamNodeCount,
+		upstreamContextLength: upstreamContext.length,
 	});
 
+	if (selectedNode.type === "file") {
+		if (!selectedNode.file) {
+			throw new Error("The selected note node does not point to a note.");
+		}
+
+		const sourceFile = app.vault.getAbstractFileByPath(selectedNode.file);
+		if (!(sourceFile instanceof TFile)) {
+			throw new Error("The selected note node does not point to an existing note.");
+		}
+
+		return {
+			canvasPath: canvasFile.path,
+			sourceFile,
+			sourceText: await app.vault.read(sourceFile),
+			sourceTitle: sourceFile.basename,
+			sourceUri: `vault://${sourceFile.path}`,
+			sourceNodeId: selectedNode.id,
+			view,
+			upstreamContext,
+			upstreamNodeCount,
+			allSourceNodeIds: [selectedNode.id],
+		};
+	}
+
+	debugLog("selection", "resolved text source", summarizeNode(selectedNode));
 	return {
 		canvasPath: canvasFile.path,
-		sourceText: combinedText,
-		sourceTitle: `${sourceNodes.length} nodes`,
-		sourceUri: `canvas://${canvasFile.path}#${primaryNode.id}`,
-		sourceNodeId: primaryNode.id,
+		sourceText: selectedNode.text ?? "",
+		sourceTitle: firstTextLine(selectedNode.text) || "Canvas text",
+		sourceUri: `canvas://${canvasFile.path}#${selectedNode.id}`,
+		sourceNodeId: selectedNode.id,
 		view,
-		upstreamContext: upstreamContext || undefined,
-		upstreamNodeCount: totalUpstreamCount,
-		allSourceNodeIds: allNodeIds,
+		upstreamContext,
+		upstreamNodeCount,
+		allSourceNodeIds: [selectedNode.id],
 	};
 }
 
 function isSupportedSourceNode(node: CanvasNodeData): boolean {
 	return (node.type === "file" && Boolean(node.file)) || node.type === "text";
+}
+
+function isNodeInGroup(node: CanvasNodeData, group: CanvasNodeData): boolean {
+	return (
+		node.x >= group.x &&
+		node.y >= group.y &&
+		node.x + (node.width ?? 0) <= group.x + (group.width ?? 0) &&
+		node.y + (node.height ?? 0) <= group.y + (group.height ?? 0)
+	);
 }
 
 function firstTextLine(text: string | undefined): string {
