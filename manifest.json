@@ -1,9 +1,9 @@
 {
 	"id": "ob-canvas-acp",
 	"name": "Canvas ACP",
-	"version": "1.0.0",
+	"version": "1.0.1-beta.0",
 	"minAppVersion": "0.15.0",
-	"description": "Canvas ACP plugin for Obsidian.",
+	"description": "Ask an ACP agent a question about a canvas note, then add the generated note back to the canvas.",
 	"author": "",
-	"isDesktopOnly": false
+	"isDesktopOnly": true
 }

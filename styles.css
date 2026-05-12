@@ -1,8 +1,18 @@
-/*
+.canvas-acp-modal textarea {
+	width: 100%;
+	min-height: 120px;
+	resize: vertical;
+}
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+.canvas-acp-source {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	margin-top: -8px;
+}
 
-If your plugin does not need CSS, delete this file.
-
-*/
+.canvas-acp-status {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	min-height: 22px;
+	padding: 4px 0;
+}

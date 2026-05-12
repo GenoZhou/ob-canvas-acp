@@ -2,12 +2,22 @@ import {App, PluginSettingTab, Setting} from "obsidian";
 import CanvasAcpPlugin from "./main";
 
 export interface CanvasAcpSettings {
-	mySetting: string;
+	agentCommand: string;
+	agentArgs: string;
+	outputFolder: string;
+	noteNameTemplate: string;
+	nodeWidth: number;
+	nodeHeight: number;
 }
 
 export const DEFAULT_SETTINGS: CanvasAcpSettings = {
-	mySetting: 'default'
-}
+	agentCommand: "",
+	agentArgs: "",
+	outputFolder: "Canvas questions",
+	noteNameTemplate: "{{source}} - {{question}}",
+	nodeWidth: 420,
+	nodeHeight: 260,
+};
 
 export class CanvasAcpSettingTab extends PluginSettingTab {
 	plugin: CanvasAcpPlugin;
@@ -19,17 +29,70 @@ export class CanvasAcpSettingTab extends PluginSettingTab {
 
 	display(): void {
 		const {containerEl} = this;
-
 		containerEl.empty();
+		new Setting(containerEl)
+			.setName("Canvas agent")
+			.setHeading();
 
 		new Setting(containerEl)
-			.setName('Settings #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
+			.setName("Agent command")
+			.setDesc("Path to the configured agent command, for example node or gemini.")
+			.addText((text) => text
+				.setPlaceholder("/opt/homebrew/bin/node")
+				.setValue(this.plugin.settings.agentCommand)
 				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
+					this.plugin.settings.agentCommand = value.trim();
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName("Agent arguments")
+			.setDesc("Arguments passed to the command. Example: /path/to/codex-acp")
+			.addTextArea((text) => text
+				.setPlaceholder("/path/to/acp-adapter")
+				.setValue(this.plugin.settings.agentArgs)
+				.onChange(async (value) => {
+					this.plugin.settings.agentArgs = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName("Output folder")
+			.setDesc("Folder for notes generated from canvas questions.")
+			.addText((text) => text
+				.setPlaceholder("Canvas questions")
+				.setValue(this.plugin.settings.outputFolder)
+				.onChange(async (value) => {
+					this.plugin.settings.outputFolder = value.trim();
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName("Note name template")
+			.setDesc("Use {{source}} and {{question}}.")
+			.addText((text) => text
+				.setPlaceholder("{{source}} - {{question}}")
+				.setValue(this.plugin.settings.noteNameTemplate)
+				.onChange(async (value) => {
+					this.plugin.settings.noteNameTemplate = value.trim() || DEFAULT_SETTINGS.noteNameTemplate;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName("Generated node size")
+			.setDesc("Width and height for the new canvas note node.")
+			.addText((text) => text
+				.setPlaceholder("420")
+				.setValue(String(this.plugin.settings.nodeWidth))
+				.onChange(async (value) => {
+					this.plugin.settings.nodeWidth = Math.max(160, Number(value) || DEFAULT_SETTINGS.nodeWidth);
+					await this.plugin.saveSettings();
+				}))
+			.addText((text) => text
+				.setPlaceholder("260")
+				.setValue(String(this.plugin.settings.nodeHeight))
+				.onChange(async (value) => {
+					this.plugin.settings.nodeHeight = Math.max(120, Number(value) || DEFAULT_SETTINGS.nodeHeight);
 					await this.plugin.saveSettings();
 				}));
 	}
