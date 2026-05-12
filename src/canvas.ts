@@ -1,4 +1,4 @@
-import {App, normalizePath, TFile} from "obsidian";
+import {App, ItemView, normalizePath, TFile} from "obsidian";
 import {CanvasAcpSettings} from "./settings";
 
 interface CanvasNodeData {
@@ -29,11 +29,15 @@ interface CanvasData {
 interface CanvasSelectionItem {
 	id?: string;
 	file?: string;
+	path?: string;
+	child?: Partial<CanvasNodeData>;
+	node?: Partial<CanvasNodeData>;
 	data?: Partial<CanvasNodeData>;
 }
 
 interface CanvasViewLike {
 	file?: TFile;
+	containerEl?: HTMLElement;
 	getViewType?: () => string;
 	canvas?: {
 		selection?: Set<CanvasSelectionItem>;
@@ -42,17 +46,18 @@ interface CanvasViewLike {
 	};
 }
 
-export interface SelectedCanvasNote {
+export interface SelectedCanvasSource {
 	canvasFile: TFile;
-	noteFile: TFile;
+	sourceFile?: TFile;
+	sourceText: string;
+	sourceTitle: string;
+	sourceUri: string;
 	node: CanvasNodeData;
 	view: CanvasViewLike;
 }
 
 export function getActiveCanvasView(app: App): CanvasViewLike {
-	// Obsidian does not expose CanvasView as a typed public view constructor.
-	// eslint-disable-next-line @typescript-eslint/no-deprecated
-	const view = app.workspace.activeLeaf?.view as CanvasViewLike | undefined;
+	const view = app.workspace.getActiveViewOfType(ItemView) as CanvasViewLike | null;
 	if (view?.getViewType?.() !== "canvas" || !view.file) {
 		throw new Error("Open a canvas and select one note node first.");
 	}
@@ -60,46 +65,111 @@ export function getActiveCanvasView(app: App): CanvasViewLike {
 	return view;
 }
 
-export async function getSelectedCanvasNote(app: App): Promise<SelectedCanvasNote> {
+export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasSource> {
 	const view = getActiveCanvasView(app);
 	const canvasFile = view.file;
 	if (!canvasFile) {
-		throw new Error("Open a canvas and select one note node first.");
+		throw new Error("Open a canvas and select one node first.");
 	}
 
 	const data = await readCanvasData(app, canvasFile);
-	const selectedItems = Array.from(view.canvas?.selection ?? []);
-	const selectedIds = new Set(selectedItems.map((item) => item.data?.id ?? item.id).filter(Boolean));
-	const selectedFiles = new Set(selectedItems.map((item) => item.data?.file ?? item.file).filter(Boolean));
+	const {selectedIds, selectedFiles} = getCanvasSelection(view, app);
 
 	const selectedNodes = data.nodes.filter((node) => selectedIds.has(node.id) || (node.file && selectedFiles.has(node.file)));
-	const fileNodes = selectedNodes.filter((node) => node.type === "file" && node.file);
+	const sourceNodes = selectedNodes.filter((node) => isSupportedSourceNode(node));
 
-	if (fileNodes.length !== 1) {
-		throw new Error("Select exactly one file node on the active canvas.");
+	if (sourceNodes.length !== 1) {
+		throw new Error(`Select exactly one note or text node on the active canvas. Found ${sourceNodes.length}.`);
 	}
 
-	const selectedNode = fileNodes[0];
-	if (!selectedNode?.file) {
-		throw new Error("The selected canvas node does not point to a note.");
+	const selectedNode = sourceNodes[0];
+	if (!selectedNode) {
+		throw new Error("The selected canvas node could not be read.");
 	}
 
-	const noteFile = app.vault.getAbstractFileByPath(selectedNode.file);
-	if (!(noteFile instanceof TFile)) {
-		throw new Error("The selected canvas node does not point to an existing note.");
+	if (selectedNode.type === "file") {
+		if (!selectedNode.file) {
+			throw new Error("The selected note node does not point to a note.");
+		}
+
+		const sourceFile = app.vault.getAbstractFileByPath(selectedNode.file);
+		if (!(sourceFile instanceof TFile)) {
+			throw new Error("The selected note node does not point to an existing note.");
+		}
+
+		return {
+			canvasFile,
+			sourceFile,
+			sourceText: await app.vault.read(sourceFile),
+			sourceTitle: sourceFile.basename,
+			sourceUri: `vault://${sourceFile.path}`,
+			node: selectedNode,
+			view,
+		};
 	}
 
 	return {
 		canvasFile,
-		noteFile,
+		sourceText: selectedNode.text ?? "",
+		sourceTitle: firstTextLine(selectedNode.text) || "Canvas text",
+		sourceUri: `canvas://${canvasFile.path}#${selectedNode.id}`,
 		node: selectedNode,
 		view,
 	};
 }
 
+function isSupportedSourceNode(node: CanvasNodeData): boolean {
+	return (node.type === "file" && Boolean(node.file)) || node.type === "text";
+}
+
+function firstTextLine(text: string | undefined): string {
+	return text?.split("\n").map((line) => line.trim()).find(Boolean)?.slice(0, 60) ?? "";
+}
+
+function getCanvasSelection(view: CanvasViewLike, app: App): {selectedIds: Set<string>; selectedFiles: Set<string>} {
+	const selectedItems = Array.from(view.canvas?.selection ?? []);
+	const selectedIds = new Set<string>();
+	const selectedFiles = new Set<string>();
+
+	for (const item of selectedItems) {
+		addDefined(selectedIds, item.data?.id);
+		addDefined(selectedIds, item.child?.id);
+		addDefined(selectedIds, item.node?.id);
+		addDefined(selectedIds, item.id);
+
+		addDefined(selectedFiles, item.data?.file);
+		addDefined(selectedFiles, item.child?.file);
+		addDefined(selectedFiles, item.node?.file);
+		addDefined(selectedFiles, item.file);
+		addDefined(selectedFiles, item.path);
+	}
+
+	for (const element of Array.from(view.containerEl?.querySelectorAll(".canvas-node.is-selected, .canvas-node.mod-selected, .canvas-node.is-focused") ?? [])) {
+		if (element instanceof HTMLElement) {
+			addDefined(selectedIds, element.dataset.nodeId);
+			addDefined(selectedIds, element.dataset.id);
+			addDefined(selectedFiles, element.dataset.path);
+			addDefined(selectedFiles, element.dataset.file);
+		}
+	}
+
+	const activeFile = app.workspace.getActiveFile();
+	if (activeFile instanceof TFile && activeFile.extension === "md" && activeFile.path !== view.file?.path) {
+		selectedFiles.add(activeFile.path);
+	}
+
+	return {selectedIds, selectedFiles};
+}
+
+function addDefined(values: Set<string>, value: string | undefined) {
+	if (value) {
+		values.add(value);
+	}
+}
+
 export async function addGeneratedNoteToCanvas(
 	app: App,
-	selection: SelectedCanvasNote,
+	selection: SelectedCanvasSource,
 	newNote: TFile,
 	question: string,
 	settings: CanvasAcpSettings,

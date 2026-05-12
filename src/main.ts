@@ -1,4 +1,4 @@
-import {Notice, Plugin} from "obsidian";
+import {ItemView, Notice, Plugin} from "obsidian";
 import {askQuestionFromCanvasSelection} from "./workflow";
 import {CanvasAcpSettings, CanvasAcpSettingTab, DEFAULT_SETTINGS} from "./settings";
 
@@ -10,11 +10,9 @@ export default class CanvasAcpPlugin extends Plugin {
 
 		this.addCommand({
 			id: "ask-question-about-canvas-note",
-			name: "Ask question about canvas note",
+			name: "Ask question about canvas node",
 			checkCallback: (checking: boolean) => {
-				// Obsidian does not expose CanvasView as a typed public view constructor.
-				// eslint-disable-next-line @typescript-eslint/no-deprecated
-				const activeView = this.app.workspace.activeLeaf?.view as {getViewType?: () => string} | undefined;
+				const activeView = this.app.workspace.getActiveViewOfType(ItemView);
 				const isCanvas = activeView?.getViewType?.() === "canvas";
 
 				if (!isCanvas) {
@@ -22,14 +20,16 @@ export default class CanvasAcpPlugin extends Plugin {
 				}
 
 				if (!checking) {
-					void askQuestionFromCanvasSelection(this.app, this.settings);
+					void askQuestionFromCanvasSelection(this.app, this.settings).catch((error) => {
+						new Notice(error instanceof Error ? error.message : "Canvas ACP failed.");
+					});
 				}
 
 				return true;
 			},
 		});
 
-		this.addRibbonIcon("message-square-plus", "Ask question about canvas note", () => {
+		this.addRibbonIcon("message-square-plus", "Ask question about canvas node", () => {
 			void askQuestionFromCanvasSelection(this.app, this.settings).catch((error) => {
 				new Notice(error instanceof Error ? error.message : "Canvas ACP failed.");
 			});

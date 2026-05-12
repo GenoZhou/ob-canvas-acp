@@ -2,14 +2,20 @@ import {App, TFile} from "obsidian";
 import {normalizeVaultPath} from "./canvas";
 import {CanvasAcpSettings} from "./settings";
 
+export interface GeneratedNoteSource {
+	title: string;
+	path?: string;
+	canvasNodeId: string;
+}
+
 export async function createGeneratedNote(
 	app: App,
-	sourceFile: TFile,
+	source: GeneratedNoteSource,
 	question: string,
 	content: string,
 	settings: CanvasAcpSettings,
 ): Promise<TFile> {
-	const basename = buildBasename(sourceFile.basename, question, settings.noteNameTemplate);
+	const basename = buildBasename(source.title, question, settings.noteNameTemplate);
 	const folder = normalizeVaultPath(settings.outputFolder);
 	const path = await nextAvailablePath(app, folder ? `${folder}/${basename}.md` : `${basename}.md`);
 
@@ -17,7 +23,8 @@ export async function createGeneratedNote(
 
 	const body = [
 		"---",
-		`source: "[[${sourceFile.path}]]"`,
+		...(source.path ? [`source: "[[${source.path}]]"`] : []),
+		`canvasNodeId: ${JSON.stringify(source.canvasNodeId)}`,
 		`question: ${JSON.stringify(question)}`,
 		"---",
 		"",

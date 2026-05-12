@@ -1,11 +1,11 @@
 # Canvas ACP
 
-Canvas ACP is an Obsidian desktop plugin for asking an ACP-compatible LLM agent a question about a note on a canvas.
+Canvas ACP is an Obsidian desktop plugin for asking an ACP-compatible LLM agent a question about a note or text node on a canvas.
 
 The workflow is:
 
-1. Open a canvas and select one file node.
-2. Run **Ask question about canvas note** from the command palette, ribbon, or a hotkey you assign in Obsidian.
+1. Open a canvas and select one note node or text node.
+2. Run **Ask question about canvas node** from the command palette, ribbon, or a hotkey you assign in Obsidian.
 3. Enter a question in the modal.
 4. The plugin sends the selected note content and question to the configured ACP agent.
 5. The agent response is saved as a new Markdown note.
@@ -26,7 +26,7 @@ For example, if your ACP adapter is a JavaScript executable, set **Agent command
 
 ## Commands
 
-- **Ask question about canvas note**: Opens the question modal for the selected canvas file node.
+- **Ask question about canvas node**: Opens the question modal for the selected canvas note or text node.
 
 You can assign a shortcut in **Settings → Hotkeys**.
 

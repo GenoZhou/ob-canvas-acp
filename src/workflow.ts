@@ -1,11 +1,11 @@
-import {App, Modal, Notice, Setting, TFile} from "obsidian";
+import {App, Modal, Notice, Setting} from "obsidian";
 import {AcpClient, splitArgs} from "./acpClient";
-import {addGeneratedNoteToCanvas, getSelectedCanvasNote, SelectedCanvasNote} from "./canvas";
+import {addGeneratedNoteToCanvas, getSelectedCanvasSource, SelectedCanvasSource} from "./canvas";
 import {createGeneratedNote} from "./noteFactory";
 import {CanvasAcpSettings} from "./settings";
 
 export async function askQuestionFromCanvasSelection(app: App, settings: CanvasAcpSettings): Promise<void> {
-	const selection = await getSelectedCanvasNote(app);
+	const selection = await getSelectedCanvasSource(app);
 	new AskQuestionModal(app, settings, selection).open();
 }
 
@@ -18,7 +18,7 @@ class AskQuestionModal extends Modal {
 	constructor(
 		app: App,
 		private readonly settings: CanvasAcpSettings,
-		private readonly selection: SelectedCanvasNote,
+		private readonly selection: SelectedCanvasSource,
 	) {
 		super(app);
 	}
@@ -27,9 +27,9 @@ class AskQuestionModal extends Modal {
 		const {contentEl} = this;
 		contentEl.empty();
 		contentEl.addClass("canvas-acp-modal");
-		contentEl.createEl("h2", {text: "Ask about this note"});
+		contentEl.createEl("h2", {text: "Ask about this canvas node"});
 		contentEl.createEl("p", {
-			text: this.selection.noteFile.path,
+			text: this.selection.sourceFile?.path ?? this.selection.sourceTitle,
 			cls: "canvas-acp-source",
 		});
 
@@ -76,23 +76,26 @@ class AskQuestionModal extends Modal {
 
 		this.isRunning = true;
 		this.updateSubmitState();
-		this.setStatus("Reading source note...");
+		this.setStatus("Reading source...");
 
 		try {
-			const sourceContent = await this.app.vault.read(this.selection.noteFile);
-			const prompt = buildPrompt(this.selection.noteFile, this.question);
+			const prompt = buildPrompt(this.selection, this.question);
 			const basePath = getVaultBasePath(this.app);
 			const client = new AcpClient(this.settings.agentCommand, splitArgs(this.settings.agentArgs), basePath);
 
 			this.setStatus("Asking ACP agent...");
 			const result = await client.runPrompt(prompt, [{
-				uri: encodeURI(`file://${basePath}/${this.selection.noteFile.path}`),
+				uri: getSourceUri(this.selection, basePath),
 				mimeType: "text/markdown",
-				text: sourceContent,
+				text: this.selection.sourceText,
 			}]);
 
 			this.setStatus("Creating note and updating canvas...");
-			const note = await createGeneratedNote(this.app, this.selection.noteFile, this.question, result.text, this.settings);
+			const note = await createGeneratedNote(this.app, {
+				title: this.selection.sourceTitle,
+				path: this.selection.sourceFile?.path,
+				canvasNodeId: this.selection.node.id,
+			}, this.question, result.text, this.settings);
 			await addGeneratedNoteToCanvas(this.app, this.selection, note, this.question, this.settings);
 
 			new Notice(`Created ${note.path}`);
@@ -119,16 +122,24 @@ class AskQuestionModal extends Modal {
 	}
 }
 
-function buildPrompt(sourceFile: TFile, question: string): string {
+function buildPrompt(selection: SelectedCanvasSource, question: string): string {
 	return [
 		"You are helping expand an Obsidian canvas graph.",
-		"Answer the user's question using the provided source note as context.",
+		"Answer the user's question using the provided canvas node as context.",
 		"Create a concise but useful Markdown note body.",
 		"Do not include YAML frontmatter, file names, or code fences around the full answer.",
 		"",
-		`Source note: ${sourceFile.path}`,
+		`Source: ${selection.sourceFile?.path ?? selection.sourceTitle}`,
 		`Question: ${question}`,
 	].join("\n");
+}
+
+function getSourceUri(selection: SelectedCanvasSource, basePath: string): string {
+	if (selection.sourceFile) {
+		return encodeURI(`file://${basePath}/${selection.sourceFile.path}`);
+	}
+
+	return encodeURI(selection.sourceUri);
 }
 
 function getVaultBasePath(app: App): string {
