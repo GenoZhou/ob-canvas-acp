@@ -81,10 +81,13 @@ class AskQuestionModal extends Modal {
 
 		this.isRunning = true;
 		this.updateSubmitState();
-		this.setStatus("Creating response node...");
+		const question = this.question;
+		this.close();
+		void this.createResponseNodeAndStream(question);
+	}
 
+	private async createResponseNodeAndStream(question: string) {
 		try {
-			const question = this.question;
 			const target = await addStreamingTextNodeToCanvas(
 				this.app,
 				this.selection,
@@ -92,14 +95,9 @@ class AskQuestionModal extends Modal {
 				this.settings,
 				"Thinking...",
 			);
-			this.close();
-			void this.streamResponse(question, target);
+			await this.streamResponse(question, target);
 		} catch (error) {
-			this.setStatus(error instanceof Error ? error.message : "Canvas ACP failed.");
 			new Notice(error instanceof Error ? error.message : "Canvas ACP failed.");
-		} finally {
-			this.isRunning = false;
-			this.updateSubmitState();
 		}
 	}
 

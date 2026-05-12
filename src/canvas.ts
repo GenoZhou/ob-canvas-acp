@@ -47,7 +47,7 @@ interface CanvasViewLike {
 }
 
 export interface SelectedCanvasSource {
-	canvasFile: TFile;
+	canvasPath: string;
 	sourceFile?: TFile;
 	sourceText: string;
 	sourceTitle: string;
@@ -57,7 +57,7 @@ export interface SelectedCanvasSource {
 }
 
 export interface CanvasTextNodeTarget {
-	canvasFile: TFile;
+	canvasPath: string;
 	nodeId: string;
 	view: CanvasViewLike;
 }
@@ -74,7 +74,7 @@ export function getActiveCanvasView(app: App): CanvasViewLike {
 export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasSource> {
 	const view = getActiveCanvasView(app);
 	const canvasFile = view.file;
-	if (!canvasFile) {
+	if (!(canvasFile instanceof TFile)) {
 		throw new Error("Open a canvas and select one node first.");
 	}
 
@@ -104,7 +104,7 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 		}
 
 		return {
-			canvasFile,
+			canvasPath: canvasFile.path,
 			sourceFile,
 			sourceText: await app.vault.read(sourceFile),
 			sourceTitle: sourceFile.basename,
@@ -115,7 +115,7 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 	}
 
 	return {
-		canvasFile,
+		canvasPath: canvasFile.path,
 		sourceText: selectedNode.text ?? "",
 		sourceTitle: firstTextLine(selectedNode.text) || "Canvas text",
 		sourceUri: `canvas://${canvasFile.path}#${selectedNode.id}`,
@@ -180,7 +180,8 @@ export async function addGeneratedNoteToCanvas(
 	question: string,
 	settings: CanvasAcpSettings,
 ) {
-	const data = await readCanvasData(app, selection.canvasFile);
+	const canvasFile = getCanvasFile(app, selection.canvasPath);
+	const data = await readCanvasData(app, canvasFile);
 	const sourceNode = data.nodes.find((node) => node.id === selection.sourceNodeId);
 
 	if (!sourceNode) {
@@ -188,7 +189,7 @@ export async function addGeneratedNoteToCanvas(
 	}
 
 	const targetNode: CanvasNodeData = {
-		id: createCanvasId("node"),
+		id: createCanvasId(),
 		type: "file",
 		file: newNote.path,
 		x: sourceNode.x + sourceNode.width + 180,
@@ -198,7 +199,7 @@ export async function addGeneratedNoteToCanvas(
 	};
 
 	const edge: CanvasEdgeData = {
-		id: createCanvasId("edge"),
+		id: createCanvasId(),
 		fromNode: sourceNode.id,
 		fromSide: "right",
 		toNode: targetNode.id,
@@ -209,7 +210,7 @@ export async function addGeneratedNoteToCanvas(
 	data.nodes.push(targetNode);
 	data.edges.push(edge);
 
-	await app.vault.modify(selection.canvasFile, `${JSON.stringify(data, null, "\t")}\n`);
+	await app.vault.modify(canvasFile, `${JSON.stringify(data, null, "\t")}\n`);
 	selection.view.canvas?.importData?.(data);
 	selection.view.canvas?.requestSave?.();
 }
@@ -221,7 +222,8 @@ export async function addStreamingTextNodeToCanvas(
 	settings: CanvasAcpSettings,
 	initialText: string,
 ): Promise<CanvasTextNodeTarget> {
-	const data = await readCanvasData(app, selection.canvasFile);
+	const canvasFile = getCanvasFile(app, selection.canvasPath);
+	const data = await readCanvasData(app, canvasFile);
 	const sourceNode = data.nodes.find((node) => node.id === selection.sourceNodeId);
 
 	if (!sourceNode) {
@@ -229,7 +231,7 @@ export async function addStreamingTextNodeToCanvas(
 	}
 
 	const targetNode: CanvasNodeData = {
-		id: createCanvasId("node"),
+		id: createCanvasId(),
 		type: "text",
 		text: initialText,
 		x: sourceNode.x + sourceNode.width + 180,
@@ -239,7 +241,7 @@ export async function addStreamingTextNodeToCanvas(
 	};
 
 	const edge: CanvasEdgeData = {
-		id: createCanvasId("edge"),
+		id: createCanvasId(),
 		fromNode: sourceNode.id,
 		fromSide: "right",
 		toNode: targetNode.id,
@@ -250,17 +252,18 @@ export async function addStreamingTextNodeToCanvas(
 	data.nodes.push(targetNode);
 	data.edges.push(edge);
 
-	await writeCanvasData(app, selection.canvasFile, data, selection.view);
+	await writeCanvasData(app, canvasFile, data, selection.view);
 
 	return {
-		canvasFile: selection.canvasFile,
+		canvasPath: selection.canvasPath,
 		nodeId: targetNode.id,
 		view: selection.view,
 	};
 }
 
 export async function updateCanvasTextNode(app: App, target: CanvasTextNodeTarget, text: string): Promise<void> {
-	const data = await readCanvasData(app, target.canvasFile);
+	const canvasFile = getCanvasFile(app, target.canvasPath);
+	const data = await readCanvasData(app, canvasFile);
 	const node = data.nodes.find((canvasNode) => canvasNode.id === target.nodeId);
 
 	if (!node) {
@@ -268,7 +271,16 @@ export async function updateCanvasTextNode(app: App, target: CanvasTextNodeTarge
 	}
 
 	node.text = text;
-	await writeCanvasData(app, target.canvasFile, data, target.view);
+	await writeCanvasData(app, canvasFile, data, target.view);
+}
+
+function getCanvasFile(app: App, path: string): TFile {
+	const file = app.vault.getAbstractFileByPath(path);
+	if (!(file instanceof TFile)) {
+		throw new Error(`Canvas file is no longer available: ${path}`);
+	}
+
+	return file;
 }
 
 async function readCanvasData(app: App, file: TFile): Promise<CanvasData> {
@@ -282,12 +294,22 @@ async function readCanvasData(app: App, file: TFile): Promise<CanvasData> {
 
 async function writeCanvasData(app: App, file: TFile, data: CanvasData, view: CanvasViewLike): Promise<void> {
 	await app.vault.modify(file, `${JSON.stringify(data, null, "\t")}\n`);
-	view.canvas?.importData?.(data);
-	view.canvas?.requestSave?.();
+	refreshCanvasView(view, data);
 }
 
-function createCanvasId(prefix: string): string {
-	return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+function refreshCanvasView(view: CanvasViewLike, data: CanvasData) {
+	try {
+		view.canvas?.importData?.(data);
+		view.canvas?.requestSave?.();
+	} catch (error) {
+		console.warn("Canvas ACP could not refresh the active canvas view.", error);
+	}
+}
+
+function createCanvasId(): string {
+	const bytes = new Uint8Array(8);
+	crypto.getRandomValues(bytes);
+	return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export function normalizeVaultPath(path: string): string {
