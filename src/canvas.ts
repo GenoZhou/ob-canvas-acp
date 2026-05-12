@@ -52,7 +52,7 @@ export interface SelectedCanvasSource {
 	sourceText: string;
 	sourceTitle: string;
 	sourceUri: string;
-	node: CanvasNodeData;
+	sourceNodeId: string;
 	view: CanvasViewLike;
 }
 
@@ -103,7 +103,7 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 			sourceText: await app.vault.read(sourceFile),
 			sourceTitle: sourceFile.basename,
 			sourceUri: `vault://${sourceFile.path}`,
-			node: selectedNode,
+			sourceNodeId: selectedNode.id,
 			view,
 		};
 	}
@@ -113,7 +113,7 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 		sourceText: selectedNode.text ?? "",
 		sourceTitle: firstTextLine(selectedNode.text) || "Canvas text",
 		sourceUri: `canvas://${canvasFile.path}#${selectedNode.id}`,
-		node: selectedNode,
+		sourceNodeId: selectedNode.id,
 		view,
 	};
 }
@@ -175,7 +175,7 @@ export async function addGeneratedNoteToCanvas(
 	settings: CanvasAcpSettings,
 ) {
 	const data = await readCanvasData(app, selection.canvasFile);
-	const sourceNode = data.nodes.find((node) => node.id === selection.node.id);
+	const sourceNode = data.nodes.find((node) => node.id === selection.sourceNodeId);
 
 	if (!sourceNode) {
 		throw new Error("The selected canvas node could not be found.");

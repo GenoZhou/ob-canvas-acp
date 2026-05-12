@@ -94,7 +94,7 @@ class AskQuestionModal extends Modal {
 			const note = await createGeneratedNote(this.app, {
 				title: this.selection.sourceTitle,
 				path: this.selection.sourceFile?.path,
-				canvasNodeId: this.selection.node.id,
+				canvasNodeId: this.selection.sourceNodeId,
 			}, this.question, result.text, this.settings);
 			await addGeneratedNoteToCanvas(this.app, this.selection, note, this.question, this.settings);
 
