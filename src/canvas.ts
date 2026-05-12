@@ -47,7 +47,7 @@ interface CanvasViewLike {
 }
 
 export interface SelectedCanvasSource {
-	canvasPath: string;
+	canvasPath?: string;
 	sourceFile?: TFile;
 	sourceText: string;
 	sourceTitle: string;
@@ -57,7 +57,7 @@ export interface SelectedCanvasSource {
 }
 
 export interface CanvasTextNodeTarget {
-	canvasPath: string;
+	canvasPath?: string;
 	nodeId: string;
 	view: CanvasViewLike;
 }
@@ -180,7 +180,7 @@ export async function addGeneratedNoteToCanvas(
 	question: string,
 	settings: CanvasAcpSettings,
 ) {
-	const canvasFile = getCanvasFile(app, selection.canvasPath);
+	const canvasFile = getCanvasFile(app, resolveCanvasPath(app, selection.canvasPath, selection.view));
 	const data = await readCanvasData(app, canvasFile);
 	const sourceNode = data.nodes.find((node) => node.id === selection.sourceNodeId);
 
@@ -222,7 +222,7 @@ export async function addStreamingTextNodeToCanvas(
 	settings: CanvasAcpSettings,
 	initialText: string,
 ): Promise<CanvasTextNodeTarget> {
-	const canvasFile = getCanvasFile(app, selection.canvasPath);
+	const canvasFile = getCanvasFile(app, resolveCanvasPath(app, selection.canvasPath, selection.view));
 	const data = await readCanvasData(app, canvasFile);
 	const sourceNode = data.nodes.find((node) => node.id === selection.sourceNodeId);
 
@@ -255,14 +255,14 @@ export async function addStreamingTextNodeToCanvas(
 	await writeCanvasData(app, canvasFile, data, selection.view);
 
 	return {
-		canvasPath: selection.canvasPath,
+		canvasPath: resolveCanvasPath(app, selection.canvasPath, selection.view),
 		nodeId: targetNode.id,
 		view: selection.view,
 	};
 }
 
 export async function updateCanvasTextNode(app: App, target: CanvasTextNodeTarget, text: string): Promise<void> {
-	const canvasFile = getCanvasFile(app, target.canvasPath);
+	const canvasFile = getCanvasFile(app, resolveCanvasPath(app, target.canvasPath, target.view));
 	const data = await readCanvasData(app, canvasFile);
 	const node = data.nodes.find((canvasNode) => canvasNode.id === target.nodeId);
 
@@ -272,6 +272,15 @@ export async function updateCanvasTextNode(app: App, target: CanvasTextNodeTarge
 
 	node.text = text;
 	await writeCanvasData(app, canvasFile, data, target.view);
+}
+
+function resolveCanvasPath(app: App, preferredPath: string | undefined, view: CanvasViewLike): string {
+	const path = preferredPath ?? view.file?.path ?? getActiveCanvasView(app).file?.path;
+	if (!path) {
+		throw new Error("Canvas file is no longer available.");
+	}
+
+	return path;
 }
 
 function getCanvasFile(app: App, path: string): TFile {
