@@ -20,6 +20,7 @@ export async function askQuestionFromCanvasSelection(app: App, settings: CanvasA
 class AskQuestionModal extends Modal {
 	private question = "";
 	private promptPreview = "";
+	private includeThinking = false;
 	private submitButton: HTMLButtonElement | null = null;
 	private statusEl: HTMLElement | null = null;
 	private isRunning = false;
@@ -110,7 +111,7 @@ class AskQuestionModal extends Modal {
 				questionLength: question.length,
 				selection: summarizeSelection(this.canvasSource),
 			});
-			const prompt = this.promptPreview || buildPrompt(this.canvasSource, question, this.settings.includeThinking);
+			const prompt = this.promptPreview || buildPrompt(this.canvasSource, question, this.includeThinking);
 			const basePath = getVaultBasePath(this.app);
 			debugLog("workflow", "vault base path resolved", {
 				basePath,
@@ -140,7 +141,7 @@ class AskQuestionModal extends Modal {
 			});
 			await canvasUpdate.flush();
 			let finalText = lastText.trim() || "No response was returned by the ACP agent.";
-			if (!this.settings.includeThinking) {
+			if (!this.includeThinking) {
 				finalText = finalText.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
 			}
 			await updateCanvasTextNode(this.app, target, finalText);
@@ -172,23 +173,24 @@ class AskQuestionModal extends Modal {
 
 		debugLog("modal", "render stats");
 		const stats = contentEl.createDiv({cls: "canvas-acp-stats"});
+		const selectedCount = this.canvasSource.allSourceNodeIds?.length ?? 1;
 		const upstreamCount = this.canvasSource.upstreamNodeCount ?? 0;
 		const sourceLen = this.canvasSource.sourceText?.length ?? 0;
 		const upstreamLen = this.canvasSource.upstreamContext?.length ?? 0;
-		stats.setText(`${upstreamCount} upstream nodes | ${sourceLen + upstreamLen} chars`);
+		stats.setText(`${selectedCount} selected | ${upstreamCount} upstream | ${sourceLen + upstreamLen} chars`);
 
 		debugLog("modal", "render input");
 		const input = document.createElement("input");
 		input.type = "text";
 		input.placeholder = "Ask a question...";
 
-		const promptLabel = contentEl.createEl("label", {text: "Prompt", cls: "canvas-acp-prompt-label"});
+		const promptLabel = contentEl.createEl("label", {text: "提示词预览", cls: "canvas-acp-prompt-label"});
 		const promptTextarea = document.createElement("textarea");
 		promptTextarea.rows = 6;
 		promptTextarea.classList.add("canvas-acp-prompt");
 
 		const updatePrompt = () => {
-			this.promptPreview = buildPrompt(this.canvasSource, this.question, this.settings.includeThinking);
+			this.promptPreview = buildPrompt(this.canvasSource, this.question, this.includeThinking);
 			promptTextarea.value = this.promptPreview;
 		};
 
@@ -213,6 +215,22 @@ class AskQuestionModal extends Modal {
 
 		// Initialize prompt even when question is empty
 		updatePrompt();
+
+		const thinkingRow = contentEl.createDiv({cls: "canvas-acp-thinking"});
+		const thinkingCheckbox = document.createElement("input");
+		thinkingCheckbox.type = "checkbox";
+		thinkingCheckbox.id = "canvas-acp-thinking-checkbox";
+		thinkingCheckbox.checked = false;
+		thinkingCheckbox.addEventListener("change", () => {
+			this.includeThinking = thinkingCheckbox.checked;
+			updatePrompt();
+		});
+		const thinkingLabel = document.createElement("label");
+		thinkingLabel.htmlFor = "canvas-acp-thinking-checkbox";
+		thinkingLabel.setText("Include thinking");
+		thinkingRow.appendChild(thinkingCheckbox);
+		thinkingRow.appendChild(thinkingLabel);
+		contentEl.appendChild(thinkingRow);
 
 		const actions = contentEl.createDiv({cls: "canvas-acp-actions"});
 		const askButton = new ButtonComponent(actions)
@@ -281,12 +299,15 @@ function createThrottledCanvasUpdate(app: App, target: CanvasTextNodeTarget): {
 }
 
 function buildPrompt(selection: SelectedCanvasSource, question: string, includeThinking: boolean): string {
+	const isMulti = (selection.allSourceNodeIds?.length ?? 1) > 1;
 	const parts = [
 		"You are helping expand an Obsidian canvas graph.",
-		"Answer the user's question using the provided canvas node as context.",
+		isMulti
+			? "The user has selected multiple canvas nodes. Answer the question using all of them as context."
+			: "Answer the user's question using the provided canvas node as context.",
 	];
 
-	if (selection.upstreamContext) {
+	if (!isMulti && selection.upstreamContext) {
 		parts.push("");
 		parts.push("The following upstream nodes also connect to the source node and may provide additional context:");
 		parts.push(selection.upstreamContext);
@@ -341,6 +362,7 @@ function summarizeSelection(selection: SelectedCanvasSource) {
 		sourceNodeId: selection.sourceNodeId,
 		sourceTextLength: sourceText.length,
 		sourceTextPreview: sourceText.slice(0, 160),
+		selectedNodeCount: selection.allSourceNodeIds?.length ?? 1,
 		upstreamNodeCount: selection.upstreamNodeCount,
 		upstreamContextLength: upstreamContext.length,
 		upstreamContextPreview: upstreamContext.slice(0, 160),

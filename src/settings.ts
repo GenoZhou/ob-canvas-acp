@@ -6,7 +6,6 @@ export interface CanvasAcpSettings {
 	agentArgs: string;
 	nodeWidth: number;
 	nodeHeight: number;
-	includeThinking: boolean;
 	debugLogging: boolean;
 }
 
@@ -15,7 +14,6 @@ export const DEFAULT_SETTINGS: CanvasAcpSettings = {
 	agentArgs: "",
 	nodeWidth: 420,
 	nodeHeight: 260,
-	includeThinking: false,
 	debugLogging: true,
 };
 
@@ -71,16 +69,6 @@ export class CanvasAcpSettingTab extends PluginSettingTab {
 				.setValue(String(this.plugin.settings.nodeHeight))
 				.onChange(async (value) => {
 					this.plugin.settings.nodeHeight = Math.max(120, Number(value) || DEFAULT_SETTINGS.nodeHeight);
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName("Include thinking")
-			.setDesc("When enabled, the agent's reasoning process (e.g. <think> blocks) is kept in the generated text node.")
-			.addToggle((toggle) => toggle
-				.setValue(this.plugin.settings.includeThinking)
-				.onChange(async (value) => {
-					this.plugin.settings.includeThinking = value;
 					await this.plugin.saveSettings();
 				}));
 

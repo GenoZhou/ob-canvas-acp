@@ -57,6 +57,7 @@ export interface SelectedCanvasSource {
 	view: CanvasViewLike;
 	upstreamContext?: string;
 	upstreamNodeCount: number;
+	allSourceNodeIds: string[];
 }
 
 export interface CanvasTextNodeTarget {
@@ -106,55 +107,104 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 		sourceNodes: sourceNodes.map(summarizeNode),
 	});
 
-	if (sourceNodes.length !== 1) {
-		throw new Error(`Select exactly one note or text node on the active canvas. Found ${sourceNodes.length}.`);
+	if (sourceNodes.length === 0) {
+		throw new Error(`Select at least one note or text node on the active canvas. Found 0.`);
 	}
 
-	const selectedNode = sourceNodes[0];
-	if (!selectedNode) {
-		throw new Error("The selected canvas node could not be read.");
-	}
+	if (sourceNodes.length === 1) {
+		const selectedNode = sourceNodes[0]!;
+		const upstreamContext = await getUpstreamContext(app, data, selectedNode);
+		const upstreamNodeCount = data.edges.filter((edge) => edge.toNode === selectedNode.id).length;
+		debugLog("selection", "upstream context resolved", {
+			upstreamNodeCount,
+			upstreamContextLength: upstreamContext.length,
+		});
 
-	const upstreamContext = await getUpstreamContext(app, data, selectedNode);
-	const upstreamNodeCount = data.edges.filter((edge) => edge.toNode === selectedNode.id).length;
-	debugLog("selection", "upstream context resolved", {
-		upstreamNodeCount,
-		upstreamContextLength: upstreamContext.length,
-	});
+		if (selectedNode.type === "file") {
+			if (!selectedNode.file) {
+				throw new Error("The selected note node does not point to a note.");
+			}
 
-	if (selectedNode.type === "file") {
-		if (!selectedNode.file) {
-			throw new Error("The selected note node does not point to a note.");
+			const sourceFile = app.vault.getAbstractFileByPath(selectedNode.file);
+			if (!(sourceFile instanceof TFile)) {
+				throw new Error("The selected note node does not point to an existing note.");
+			}
+
+			return {
+				canvasPath: canvasFile.path,
+				sourceFile,
+				sourceText: await app.vault.read(sourceFile),
+				sourceTitle: sourceFile.basename,
+				sourceUri: `vault://${sourceFile.path}`,
+				sourceNodeId: selectedNode.id,
+				view,
+				upstreamContext,
+				upstreamNodeCount,
+				allSourceNodeIds: [selectedNode.id],
+			};
 		}
 
-		const sourceFile = app.vault.getAbstractFileByPath(selectedNode.file);
-		if (!(sourceFile instanceof TFile)) {
-			throw new Error("The selected note node does not point to an existing note.");
-		}
-
+		debugLog("selection", "resolved text source", summarizeNode(selectedNode));
 		return {
 			canvasPath: canvasFile.path,
-			sourceFile,
-			sourceText: await app.vault.read(sourceFile),
-			sourceTitle: sourceFile.basename,
-			sourceUri: `vault://${sourceFile.path}`,
+			sourceText: selectedNode.text ?? "",
+			sourceTitle: firstTextLine(selectedNode.text) || "Canvas text",
+			sourceUri: `canvas://${canvasFile.path}#${selectedNode.id}`,
 			sourceNodeId: selectedNode.id,
 			view,
 			upstreamContext,
 			upstreamNodeCount,
+			allSourceNodeIds: [selectedNode.id],
 		};
 	}
 
-	debugLog("selection", "resolved text source", summarizeNode(selectedNode));
+	// Multi-select
+	const primaryNode = sourceNodes[0]!;
+	const allNodeIds = sourceNodes.map((n) => n.id);
+	const excludeSet = new Set(allNodeIds);
+
+	const texts: string[] = [];
+	const upstreamParts: string[] = [];
+	const seenUpstream = new Set<string>();
+	let totalUpstreamCount = 0;
+
+	for (const node of sourceNodes) {
+		if (node.type === "file" && node.file) {
+			const file = app.vault.getAbstractFileByPath(node.file);
+			if (file instanceof TFile) {
+				texts.push(`Note [[${file.basename}]]:\n${await app.vault.read(file)}`);
+			}
+		} else if (node.type === "text") {
+			texts.push(`Text node:\n${node.text ?? ""}`);
+		}
+
+		const ctx = await getUpstreamContext(app, data, node, excludeSet);
+		if (ctx && !seenUpstream.has(ctx)) {
+			seenUpstream.add(ctx);
+			upstreamParts.push(ctx);
+		}
+		totalUpstreamCount += data.edges.filter((edge) => edge.toNode === node.id).length;
+	}
+
+	const combinedText = texts.join("\n\n---\n\n");
+	const upstreamContext = upstreamParts.join("\n\n");
+
+	debugLog("selection", "resolved multi source", {
+		nodeCount: sourceNodes.length,
+		totalUpstreamCount,
+		combinedTextLength: combinedText.length,
+	});
+
 	return {
 		canvasPath: canvasFile.path,
-		sourceText: selectedNode.text ?? "",
-		sourceTitle: firstTextLine(selectedNode.text) || "Canvas text",
-		sourceUri: `canvas://${canvasFile.path}#${selectedNode.id}`,
-		sourceNodeId: selectedNode.id,
+		sourceText: combinedText,
+		sourceTitle: `${sourceNodes.length} nodes`,
+		sourceUri: `canvas://${canvasFile.path}#${primaryNode.id}`,
+		sourceNodeId: primaryNode.id,
 		view,
-		upstreamContext,
-		upstreamNodeCount,
+		upstreamContext: upstreamContext || undefined,
+		upstreamNodeCount: totalUpstreamCount,
+		allSourceNodeIds: allNodeIds,
 	};
 }
 
@@ -166,11 +216,12 @@ function firstTextLine(text: string | undefined): string {
 	return text?.split("\n").map((line) => line.trim()).find(Boolean)?.slice(0, 60) ?? "";
 }
 
-async function getUpstreamContext(app: App, data: CanvasData, selectedNode: CanvasNodeData): Promise<string> {
+async function getUpstreamContext(app: App, data: CanvasData, selectedNode: CanvasNodeData, excludeNodeIds?: Set<string>): Promise<string> {
 	const upstreamEdges = data.edges.filter((edge) => edge.toNode === selectedNode.id);
 	const upstreamNodes = upstreamEdges
 		.map((edge) => data.nodes.find((node) => node.id === edge.fromNode))
-		.filter((node): node is CanvasNodeData => Boolean(node));
+		.filter((node): node is CanvasNodeData => Boolean(node))
+		.filter((node) => !excludeNodeIds?.has(node.id));
 
 	if (upstreamNodes.length === 0) {
 		return "";
@@ -289,21 +340,24 @@ export async function addStreamingTextNodeToCanvas(
 		height: settings.nodeHeight,
 	};
 
-	const edge: CanvasEdgeData = {
-		id: createCanvasId(),
-		fromNode: sourceNode.id,
-		fromSide: "right",
-		toNode: targetNode.id,
-		toSide: "left",
-		label: question,
-	};
+	for (const sourceNodeId of selection.allSourceNodeIds) {
+		const fromNode = data.nodes.find((node) => node.id === sourceNodeId);
+		if (fromNode) {
+			const edge: CanvasEdgeData = {
+				id: createCanvasId(),
+				fromNode: sourceNodeId,
+				fromSide: "right",
+				toNode: targetNode.id,
+				toSide: "left",
+				label: question,
+			};
+			data.edges.push(edge);
+		}
+	}
 
 	data.nodes.push(targetNode);
-	data.edges.push(edge);
-	debugLog("canvas-write", "new text node and edge prepared", {
+	debugLog("canvas-write", "new text node and edges prepared", {
 		targetNode: summarizeNode(targetNode),
-		edge,
-		nodeCount: data.nodes.length,
 		edgeCount: data.edges.length,
 	});
 

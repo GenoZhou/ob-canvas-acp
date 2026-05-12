@@ -24,6 +24,14 @@
 	font-size: var(--font-ui-smaller);
 }
 
+.canvas-acp-thinking {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 8px;
+	font-size: var(--font-ui-small);
+}
+
 .canvas-acp-actions {
 	display: flex;
 	gap: 8px;
