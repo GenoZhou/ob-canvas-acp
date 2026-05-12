@@ -1,6 +1,10 @@
-import {App, ItemView, normalizePath, TFile} from "obsidian";
+import {App, ItemView, TFile} from "obsidian";
 import {CanvasAcpSettings} from "./settings";
 import {debugLog, debugWarn} from "./debug";
+
+const HORIZONTAL_OFFSET = 180;
+const VERTICAL_GAP = 40;
+const CANVAS_ID_BYTES = 8;
 
 interface CanvasNodeData {
 	id: string;
@@ -67,6 +71,12 @@ export interface CanvasTextNodeTarget {
 	view: CanvasViewLike;
 }
 
+export function assertCanvasViewAvailable(view: CanvasViewLike | undefined): asserts view is CanvasViewLike {
+	if (!view) {
+		throw new Error("Canvas view is no longer available. Please reopen the canvas and try again.");
+	}
+}
+
 export function getActiveCanvasView(app: App): CanvasViewLike {
 	const view = app.workspace.getActiveViewOfType(ItemView) as CanvasViewLike | null;
 	debugLog("canvas", "active view lookup", {
@@ -118,6 +128,17 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 	}
 
 	const selectedNode = sourceNodes[0]!;
+	const upstreamContext = await getUpstreamContext(app, data, selectedNode);
+	const upstreamNodeCount = countUpstreamEdges(data, selectedNode.id);
+
+	const baseResult = {
+		canvasPath: canvasFile.path,
+		sourceNodeId: selectedNode.id,
+		view,
+		upstreamContext,
+		upstreamNodeCount,
+		allSourceNodeIds: [selectedNode.id],
+	};
 
 	if (selectedNode.type === "group") {
 		const groupNodes = data.nodes.filter((node) =>
@@ -130,20 +151,9 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 			throw new Error("The selected group does not contain any note or text nodes.");
 		}
 
-		const texts: string[] = [];
-		for (const node of groupNodes) {
-			if (node.type === "file" && node.file) {
-				const file = app.vault.getAbstractFileByPath(node.file);
-				if (file instanceof TFile) {
-					texts.push(`Note [[${file.basename}]]:\n${await app.vault.read(file)}`);
-				}
-			} else if (node.type === "text") {
-				texts.push(`Text node:\n${node.text ?? ""}`);
-			}
-		}
+		const texts = (await Promise.all(groupNodes.map((node) => readNodeContent(app, node))))
+			.filter((text): text is string => Boolean(text));
 
-		const upstreamContext = await getUpstreamContext(app, data, selectedNode);
-		const upstreamNodeCount = data.edges.filter((edge) => edge.toNode === selectedNode.id).length;
 		debugLog("selection", "resolved group source", {
 			groupLabel: selectedNode.label,
 			groupNodeCount: groupNodes.length,
@@ -151,20 +161,13 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 		});
 
 		return {
-			canvasPath: canvasFile.path,
+			...baseResult,
 			sourceText: texts.join("\n\n---\n\n"),
 			sourceTitle: selectedNode.label || "Group",
 			sourceUri: `canvas://${canvasFile.path}#${selectedNode.id}`,
-			sourceNodeId: selectedNode.id,
-			view,
-			upstreamContext,
-			upstreamNodeCount,
-			allSourceNodeIds: [selectedNode.id],
 		};
 	}
 
-	const upstreamContext = await getUpstreamContext(app, data, selectedNode);
-	const upstreamNodeCount = data.edges.filter((edge) => edge.toNode === selectedNode.id).length;
 	debugLog("selection", "upstream context resolved", {
 		upstreamNodeCount,
 		upstreamContextLength: upstreamContext.length,
@@ -181,30 +184,20 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 		}
 
 		return {
-			canvasPath: canvasFile.path,
+			...baseResult,
 			sourceFile,
 			sourceText: await app.vault.read(sourceFile),
 			sourceTitle: sourceFile.basename,
 			sourceUri: `vault://${sourceFile.path}`,
-			sourceNodeId: selectedNode.id,
-			view,
-			upstreamContext,
-			upstreamNodeCount,
-			allSourceNodeIds: [selectedNode.id],
 		};
 	}
 
 	debugLog("selection", "resolved text source", summarizePartialNode(selectedNode));
 	return {
-		canvasPath: canvasFile.path,
+		...baseResult,
 		sourceText: selectedNode.text ?? "",
 		sourceTitle: firstTextLine(selectedNode.text) || "Canvas text",
 		sourceUri: `canvas://${canvasFile.path}#${selectedNode.id}`,
-		sourceNodeId: selectedNode.id,
-		view,
-		upstreamContext,
-		upstreamNodeCount,
-		allSourceNodeIds: [selectedNode.id],
 	};
 }
 
@@ -236,20 +229,27 @@ async function getUpstreamContext(app: App, data: CanvasData, selectedNode: Canv
 		return "";
 	}
 
-	const parts: string[] = [];
-	for (const node of upstreamNodes) {
-		if (node.type === "file" && node.file) {
-			const file = app.vault.getAbstractFileByPath(node.file);
-			if (file instanceof TFile) {
-				const content = await app.vault.read(file);
-				parts.push(`Note [[${file.basename}]]:\n${content}`);
-			}
-		} else if (node.type === "text") {
-			parts.push(`Text node:\n${node.text ?? ""}`);
-		}
-	}
+	const parts = (await Promise.all(upstreamNodes.map((node) => readNodeContent(app, node))))
+		.filter((text): text is string => Boolean(text));
 
 	return parts.join("\n\n");
+}
+
+async function readNodeContent(app: App, node: CanvasNodeData): Promise<string | undefined> {
+	if (node.type === "file" && node.file) {
+		const file = app.vault.getAbstractFileByPath(node.file);
+		if (file instanceof TFile) {
+			const content = await app.vault.read(file);
+			return `Note [[${file.basename}]]:\n${content}`;
+		}
+	} else if (node.type === "text") {
+		return `Text node:\n${node.text ?? ""}`;
+	}
+	return undefined;
+}
+
+function countUpstreamEdges(data: CanvasData, nodeId: string): number {
+	return data.edges.filter((edge) => edge.toNode === nodeId).length;
 }
 
 function getCanvasSelection(view: CanvasViewLike, app: App): {selectedIds: Set<string>; selectedFiles: Set<string>} {
@@ -312,9 +312,7 @@ export async function addStreamingTextNodeToCanvas(
 	settings: CanvasAcpSettings,
 	initialText: string,
 ): Promise<CanvasTextNodeTarget> {
-	if (!selection.view) {
-		throw new Error("Canvas view is no longer available. Please reopen the canvas and try again.");
-	}
+	assertCanvasViewAvailable(selection.view);
 	const canvasPath = resolveCanvasPath(app, selection.canvasPath, selection.view);
 	debugLog("canvas-write", "add streaming text node start", {
 		canvasPath,
@@ -372,9 +370,7 @@ export async function addStreamingTextNodeToCanvas(
 }
 
 export async function updateCanvasTextNode(app: App, target: CanvasTextNodeTarget, text: string): Promise<void> {
-	if (!target.view) {
-		throw new Error("Canvas view is no longer available. Please reopen the canvas and try again.");
-	}
+	assertCanvasViewAvailable(target.view);
 	const canvasPath = resolveCanvasPath(app, target.canvasPath, target.view);
 	debugLog("canvas-write", "update text node start", {
 		canvasPath,
@@ -465,8 +461,8 @@ function refreshCanvasView(view: CanvasViewLike, data: CanvasData) {
 }
 
 function findNonOverlappingPosition(data: CanvasData, sourceNode: CanvasNodeData, nodeWidth: number, nodeHeight: number): {x: number; y: number} {
-	const targetX = sourceNode.x + sourceNode.width + 180;
-	const gap = 40;
+	const targetX = sourceNode.x + sourceNode.width + HORIZONTAL_OFFSET;
+	const gap = VERTICAL_GAP;
 
 	const overlappingNodes = data.nodes.filter((node) => {
 		return node.x < targetX + nodeWidth && node.x + (node.width ?? nodeWidth) > targetX;
@@ -486,7 +482,7 @@ function findNonOverlappingPosition(data: CanvasData, sourceNode: CanvasNodeData
 }
 
 function createCanvasId(): string {
-	const bytes = new Uint8Array(8);
+	const bytes = new Uint8Array(CANVAS_ID_BYTES);
 	crypto.getRandomValues(bytes);
 	return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }

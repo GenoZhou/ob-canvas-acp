@@ -1,5 +1,7 @@
 let debugLoggingEnabled = true;
 
+const MAX_PREVIEW_LENGTH = 160;
+
 export function setCanvasAcpDebugLogging(enabled: boolean) {
 	debugLoggingEnabled = enabled;
 }
@@ -64,9 +66,10 @@ function sanitizeDebugDataInner(data: unknown, seen: WeakSet<object>): unknown {
 
 		const safe: Record<string, unknown> = {};
 		for (const [key, value] of Object.entries(data)) {
-			if (key.toLowerCase().includes("text") && typeof value === "string") {
+			const lowerKey = key.toLowerCase();
+			if (lowerKey.includes("text") && typeof value === "string") {
 				safe[key] = summarizeText(value);
-			} else if (key.toLowerCase().includes("content") && typeof value === "string") {
+			} else if (lowerKey.includes("content") && typeof value === "string") {
 				safe[key] = summarizeText(value);
 			} else {
 				safe[key] = sanitizeDebugDataInner(value, seen);
@@ -81,6 +84,6 @@ function sanitizeDebugDataInner(data: unknown, seen: WeakSet<object>): unknown {
 export function summarizeText(text: string): {length: number; preview: string} {
 	return {
 		length: text.length,
-		preview: text.slice(0, 160),
+		preview: text.slice(0, MAX_PREVIEW_LENGTH),
 	};
 }

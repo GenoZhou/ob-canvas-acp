@@ -2,6 +2,7 @@ import {App, ButtonComponent, Modal, Notice} from "obsidian";
 import {AcpClient, splitArgs} from "./acpClient";
 import {
 	addStreamingTextNodeToCanvas,
+	assertCanvasViewAvailable,
 	CanvasTextNodeTarget,
 	getSelectedCanvasSource,
 	SelectedCanvasSource,
@@ -9,6 +10,9 @@ import {
 } from "./canvas";
 import {CanvasAcpSettings} from "./settings";
 import {debugError, debugLog} from "./debug";
+
+const CONTEXT_DIVIDER = "\n\n--- Context ---\n";
+const THINKING_TAG_REGEX = /<think>[\s\S]*?<\/think>/gi;
 
 export async function askQuestionFromCanvasSelection(app: App, settings: CanvasAcpSettings): Promise<void> {
 	debugLog("workflow", "command invoked");
@@ -22,7 +26,6 @@ class AskQuestionModal extends Modal {
 	private promptPreview = "";
 	private includeThinking = false;
 	private submitButton: HTMLButtonElement | null = null;
-	private statusEl: HTMLElement | null = null;
 	private isRunning = false;
 
 	constructor(
@@ -65,7 +68,7 @@ class AskQuestionModal extends Modal {
 		const question = this.question;
 		const promptTextarea = this.contentEl.querySelector(".canvas-acp-prompt") as HTMLTextAreaElement | null;
 		const rawPreview = promptTextarea?.value ?? "";
-		const divider = "\n\n--- Context ---\n";
+		const divider = CONTEXT_DIVIDER;
 		const dividerIndex = rawPreview.indexOf(divider);
 		this.promptPreview = dividerIndex !== -1 ? rawPreview.slice(0, dividerIndex).trim() : rawPreview.trim();
 		debugLog("modal", "submit", {
@@ -79,9 +82,7 @@ class AskQuestionModal extends Modal {
 
 	private async createResponseNodeAndStream(question: string) {
 		try {
-			if (!this.canvasSource?.view) {
-				throw new Error("Canvas source is no longer available. Please reopen the canvas and try again.");
-			}
+			assertCanvasViewAvailable(this.canvasSource?.view);
 			debugLog("workflow", "create response node start", {
 				questionLength: question.length,
 				selection: summarizeSelection(this.canvasSource),
@@ -106,9 +107,7 @@ class AskQuestionModal extends Modal {
 		const canvasUpdate = createThrottledCanvasUpdate(this.app, target);
 
 		try {
-			if (!this.canvasSource?.view) {
-				throw new Error("Canvas source is no longer available. Please reopen the canvas and try again.");
-			}
+			assertCanvasViewAvailable(this.canvasSource?.view);
 			debugLog("workflow", "stream response start", {
 				target,
 				questionLength: question.length,
@@ -145,7 +144,7 @@ class AskQuestionModal extends Modal {
 			await canvasUpdate.flush();
 			let finalText = lastText.trim() || "No response was returned by the ACP agent.";
 			if (!this.includeThinking) {
-				finalText = finalText.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+				finalText = finalText.replace(THINKING_TAG_REGEX, "").trim();
 			}
 			await updateCanvasTextNode(this.app, target, finalText);
 		} catch (error) {
@@ -154,12 +153,6 @@ class AskQuestionModal extends Modal {
 			const message = error instanceof Error ? error.message : "Canvas ACP failed.";
 			await updateCanvasTextNode(this.app, target, `Canvas ACP failed:\n\n${message}`);
 			new Notice(message);
-		}
-	}
-
-	private setStatus(message: string) {
-		if (this.statusEl) {
-			this.statusEl.setText(message);
 		}
 	}
 
@@ -186,12 +179,12 @@ class AskQuestionModal extends Modal {
 		input.type = "text";
 		input.placeholder = "Ask a question...";
 
-		const promptLabel = contentEl.createEl("label", {text: "提示词预览", cls: "canvas-acp-prompt-label"});
+		const promptLabel = contentEl.createEl("label", {text: "Prompt preview", cls: "canvas-acp-prompt-label"});
 		const promptTextarea = document.createElement("textarea");
 		promptTextarea.rows = 6;
 		promptTextarea.classList.add("canvas-acp-prompt");
 
-		const contextDivider = "\n\n--- Context ---\n";
+		const contextDivider = CONTEXT_DIVIDER;
 		const updatePrompt = () => {
 			const prompt = buildPrompt(this.canvasSource, this.question, this.includeThinking);
 			const context = this.canvasSource.sourceText ?? "";
@@ -248,7 +241,7 @@ class AskQuestionModal extends Modal {
 			.onClick(() => this.close());
 
 		this.updateSubmitState();
-		window.setTimeout(() => input.focus(), 0);
+		requestAnimationFrame(() => input.focus());
 	}
 }
 

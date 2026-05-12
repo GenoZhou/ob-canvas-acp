@@ -130,12 +130,13 @@ export class AcpClient {
 				}], onChunk) as {stopReason?: string};
 			}
 
+			const finalText = this.chunks.join("").trim();
 			debugLog("acp", "run prompt completed", {
-				textLength: this.chunks.join("").trim().length,
+				textLength: finalText.length,
 				stopReason: response?.stopReason,
 			});
 			return {
-				text: this.chunks.join("").trim(),
+				text: finalText,
 				stopReason: response?.stopReason,
 			};
 		} finally {
@@ -389,10 +390,10 @@ export function buildTextOnlyPrompt(prompt: string, resources: Array<{uri: strin
 		prompt,
 		"",
 		"Context:",
-		...resources.map((resource) => [
+		...resources.flatMap((resource) => [
 			`<resource uri="${resource.uri}" mimeType="${resource.mimeType}">`,
 			resource.text,
 			"</resource>",
-		].join("\n")),
+		]),
 	].join("\n");
 }
