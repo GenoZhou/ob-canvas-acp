@@ -100,6 +100,47 @@ npm run build
 - Attach `manifest.json`, `main.js`, and `styles.css` (if present) to the release as individual assets.
 - After the initial release, follow the process to add/update your plugin in the community catalog as required.
 
+### Release workflow (automated)
+
+This repo includes `scripts/release.mjs` to automate the Obsidian release checklist.
+
+```bash
+# Full publish: bump, commit, tag, push, and create GitHub Release
+npm run release
+
+# Prepare only: bump, commit, and tag locally (no push / no release)
+npm run release:prepare
+```
+
+Both commands will:
+1. Verify you are on `main` with a clean working tree.
+2. Verify local `main` is in sync with `origin/main`.
+3. Run `npm run build` and abort on failure.
+4. Ask for the target version (defaults to stripping the prerelease suffix, e.g. `1.0.1-beta.20` → `1.0.1`).
+5. Bump `package.json`, `manifest.json`, and `versions.json`.
+6. Commit the version bump and create a **tag without a `v` prefix**.
+
+In `--publish` mode it also:
+7. Pushes `main` and the tag to `origin`.
+8. Creates a GitHub Release on the `origin` repo using `gh` CLI, attaching `main.js`, `manifest.json`, and `styles.css`.
+
+### Hard-won lessons (do not repeat manually)
+
+1. **Never rely on `npm version` alone for Obsidian releases.**  
+   `npm version` creates a git tag with a `v` prefix by default (e.g. `v1.0.1`). Obsidian requires the tag to match `manifest.json` exactly, with **no prefix**. The release script handles this by using `--no-git-tag-version` and creating the tag manually.
+
+2. **Stage `package-lock.json` explicitly.**  
+   `npm version` mutates `package-lock.json`, but the `version` npm script only staged `manifest.json` and `versions.json`. This left `package-lock.json` unstaged and easy to miss in the release commit. The release script stages all four files together.
+
+3. **Specify the correct repo for `gh release create`.**  
+   If your fork retains the `upstream` remote (`obsidianmd/obsidian-sample-plugin`), the `gh` CLI defaults to that upstream instead of `origin`. The release script detects `origin` and passes `--repo <owner/repo>` explicitly.
+
+4. **Always build before releasing.**  
+   `main.js` is a build artifact and must be up-to-date before it is attached to the GitHub Release. The script runs `npm run build` as a gate before any version bumps.
+
+5. **Do not commit build artifacts (`main.js`) to git.**  
+   `main.js` is generated and should remain gitignored. It is only uploaded as a release asset.
+
 ## Security, privacy, and compliance
 
 Follow Obsidian's **Developer Policies** and **Plugin Guidelines**. In particular:
