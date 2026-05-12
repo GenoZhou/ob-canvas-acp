@@ -8,6 +8,7 @@ export interface CanvasAcpSettings {
 	noteNameTemplate: string;
 	nodeWidth: number;
 	nodeHeight: number;
+	debugLogging: boolean;
 }
 
 export const DEFAULT_SETTINGS: CanvasAcpSettings = {
@@ -17,6 +18,7 @@ export const DEFAULT_SETTINGS: CanvasAcpSettings = {
 	noteNameTemplate: "{{source}} - {{question}}",
 	nodeWidth: 420,
 	nodeHeight: 260,
+	debugLogging: true,
 };
 
 export class CanvasAcpSettingTab extends PluginSettingTab {
@@ -93,6 +95,16 @@ export class CanvasAcpSettingTab extends PluginSettingTab {
 				.setValue(String(this.plugin.settings.nodeHeight))
 				.onChange(async (value) => {
 					this.plugin.settings.nodeHeight = Math.max(120, Number(value) || DEFAULT_SETTINGS.nodeHeight);
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName("Debug logging")
+			.setDesc("Print selection, canvas write, and protocol diagnostics to the developer console.")
+			.addToggle((toggle) => toggle
+				.setValue(this.plugin.settings.debugLogging)
+				.onChange(async (value) => {
+					this.plugin.settings.debugLogging = value;
 					await this.plugin.saveSettings();
 				}));
 	}

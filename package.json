@@ -1,6 +1,6 @@
 {
 	"name": "ob-canvas-acp",
-	"version": "1.0.1-beta.6",
+	"version": "1.0.1-beta.7",
 	"description": "Canvas ACP plugin for Obsidian.",
 	"main": "main.js",
 	"type": "module",

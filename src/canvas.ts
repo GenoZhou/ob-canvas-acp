@@ -1,5 +1,6 @@
 import {App, ItemView, normalizePath, TFile} from "obsidian";
 import {CanvasAcpSettings} from "./settings";
+import {debugLog, debugWarn} from "./debug";
 
 interface CanvasNodeData {
 	id: string;
@@ -64,6 +65,13 @@ export interface CanvasTextNodeTarget {
 
 export function getActiveCanvasView(app: App): CanvasViewLike {
 	const view = app.workspace.getActiveViewOfType(ItemView) as CanvasViewLike | null;
+	debugLog("canvas", "active view lookup", {
+		hasView: Boolean(view),
+		viewType: view?.getViewType?.(),
+		filePath: view?.file?.path,
+		hasCanvas: Boolean(view?.canvas),
+		selectionSize: view?.canvas?.selection?.size,
+	});
 	if (view?.getViewType?.() !== "canvas" || !view.file) {
 		throw new Error("Open a canvas and select one note node first.");
 	}
@@ -72,6 +80,7 @@ export function getActiveCanvasView(app: App): CanvasViewLike {
 }
 
 export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasSource> {
+	debugLog("selection", "begin selected source resolution");
 	const view = getActiveCanvasView(app);
 	const canvasFile = view.file;
 	if (!(canvasFile instanceof TFile)) {
@@ -80,9 +89,20 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 
 	const data = await readCanvasData(app, canvasFile);
 	const {selectedIds, selectedFiles} = getCanvasSelection(view, app);
+	debugLog("selection", "selection candidates resolved", {
+		canvasPath: canvasFile.path,
+		nodeCount: data.nodes.length,
+		edgeCount: data.edges.length,
+		selectedIds: Array.from(selectedIds),
+		selectedFiles: Array.from(selectedFiles),
+	});
 
 	const selectedNodes = data.nodes.filter((node) => selectedIds.has(node.id) || (node.file && selectedFiles.has(node.file)));
 	const sourceNodes = selectedNodes.filter((node) => isSupportedSourceNode(node));
+	debugLog("selection", "source node filter result", {
+		selectedNodes: selectedNodes.map(summarizeNode),
+		sourceNodes: sourceNodes.map(summarizeNode),
+	});
 
 	if (sourceNodes.length !== 1) {
 		throw new Error(`Select exactly one note or text node on the active canvas. Found ${sourceNodes.length}.`);
@@ -114,6 +134,7 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 		};
 	}
 
+	debugLog("selection", "resolved text source", summarizeNode(selectedNode));
 	return {
 		canvasPath: canvasFile.path,
 		sourceText: selectedNode.text ?? "",
@@ -136,6 +157,10 @@ function getCanvasSelection(view: CanvasViewLike, app: App): {selectedIds: Set<s
 	const selectedItems = Array.from(view.canvas?.selection ?? []);
 	const selectedIds = new Set<string>();
 	const selectedFiles = new Set<string>();
+	debugLog("selection", "raw canvas selection", {
+		count: selectedItems.length,
+		items: selectedItems.map(summarizeSelectionItem),
+	});
 
 	for (const item of selectedItems) {
 		addDefined(selectedIds, item.data?.id);
@@ -150,7 +175,19 @@ function getCanvasSelection(view: CanvasViewLike, app: App): {selectedIds: Set<s
 		addDefined(selectedFiles, item.path);
 	}
 
-	for (const element of Array.from(view.containerEl?.querySelectorAll(".canvas-node.is-selected, .canvas-node.mod-selected, .canvas-node.is-focused") ?? [])) {
+	const selectedElements = Array.from(view.containerEl?.querySelectorAll(".canvas-node.is-selected, .canvas-node.mod-selected, .canvas-node.is-focused") ?? []);
+	debugLog("selection", "dom selected nodes", {
+		count: selectedElements.length,
+		elements: selectedElements.map((element) => element instanceof HTMLElement ? {
+			nodeId: element.dataset.nodeId,
+			id: element.dataset.id,
+			path: element.dataset.path,
+			file: element.dataset.file,
+			className: element.className,
+		} : {elementType: typeof element}),
+	});
+
+	for (const element of selectedElements) {
 		if (element instanceof HTMLElement) {
 			addDefined(selectedIds, element.dataset.nodeId);
 			addDefined(selectedIds, element.dataset.id);
@@ -160,6 +197,10 @@ function getCanvasSelection(view: CanvasViewLike, app: App): {selectedIds: Set<s
 	}
 
 	const activeFile = app.workspace.getActiveFile();
+	debugLog("selection", "active file fallback", {
+		activeFilePath: activeFile?.path,
+		canvasFilePath: view.file?.path,
+	});
 	if (activeFile instanceof TFile && activeFile.extension === "md" && activeFile.path !== view.file?.path) {
 		selectedFiles.add(activeFile.path);
 	}
@@ -180,7 +221,14 @@ export async function addGeneratedNoteToCanvas(
 	question: string,
 	settings: CanvasAcpSettings,
 ) {
-	const canvasFile = getCanvasFile(app, resolveCanvasPath(app, selection.canvasPath, selection.view));
+	const canvasPath = resolveCanvasPath(app, selection.canvasPath, selection.view);
+	debugLog("canvas-write", "add generated note node", {
+		canvasPath,
+		sourceNodeId: selection.sourceNodeId,
+		newNotePath: newNote.path,
+		questionLength: question.length,
+	});
+	const canvasFile = getCanvasFile(app, canvasPath);
 	const data = await readCanvasData(app, canvasFile);
 	const sourceNode = data.nodes.find((node) => node.id === selection.sourceNodeId);
 
@@ -222,7 +270,14 @@ export async function addStreamingTextNodeToCanvas(
 	settings: CanvasAcpSettings,
 	initialText: string,
 ): Promise<CanvasTextNodeTarget> {
-	const canvasFile = getCanvasFile(app, resolveCanvasPath(app, selection.canvasPath, selection.view));
+	const canvasPath = resolveCanvasPath(app, selection.canvasPath, selection.view);
+	debugLog("canvas-write", "add streaming text node start", {
+		canvasPath,
+		sourceNodeId: selection.sourceNodeId,
+		questionLength: question.length,
+		initialText,
+	});
+	const canvasFile = getCanvasFile(app, canvasPath);
 	const data = await readCanvasData(app, canvasFile);
 	const sourceNode = data.nodes.find((node) => node.id === selection.sourceNodeId);
 
@@ -251,18 +306,31 @@ export async function addStreamingTextNodeToCanvas(
 
 	data.nodes.push(targetNode);
 	data.edges.push(edge);
+	debugLog("canvas-write", "new text node and edge prepared", {
+		targetNode: summarizeNode(targetNode),
+		edge,
+		nodeCount: data.nodes.length,
+		edgeCount: data.edges.length,
+	});
 
 	await writeCanvasData(app, canvasFile, data, selection.view);
 
 	return {
-		canvasPath: resolveCanvasPath(app, selection.canvasPath, selection.view),
+		canvasPath,
 		nodeId: targetNode.id,
 		view: selection.view,
 	};
 }
 
 export async function updateCanvasTextNode(app: App, target: CanvasTextNodeTarget, text: string): Promise<void> {
-	const canvasFile = getCanvasFile(app, resolveCanvasPath(app, target.canvasPath, target.view));
+	const canvasPath = resolveCanvasPath(app, target.canvasPath, target.view);
+	debugLog("canvas-write", "update text node start", {
+		canvasPath,
+		nodeId: target.nodeId,
+		textLength: text.length,
+		textPreview: text.slice(0, 160),
+	});
+	const canvasFile = getCanvasFile(app, canvasPath);
 	const data = await readCanvasData(app, canvasFile);
 	const node = data.nodes.find((canvasNode) => canvasNode.id === target.nodeId);
 
@@ -276,6 +344,11 @@ export async function updateCanvasTextNode(app: App, target: CanvasTextNodeTarge
 
 function resolveCanvasPath(app: App, preferredPath: string | undefined, view: CanvasViewLike): string {
 	const path = preferredPath ?? view.file?.path ?? getActiveCanvasView(app).file?.path;
+	debugLog("canvas", "resolve canvas path", {
+		preferredPath,
+		viewFilePath: view.file?.path,
+		resolvedPath: path,
+	});
 	if (!path) {
 		throw new Error("Canvas file is no longer available.");
 	}
@@ -285,6 +358,11 @@ function resolveCanvasPath(app: App, preferredPath: string | undefined, view: Ca
 
 function getCanvasFile(app: App, path: string): TFile {
 	const file = app.vault.getAbstractFileByPath(path);
+	debugLog("canvas", "resolve canvas file", {
+		path,
+		fileType: file?.constructor.name,
+		isTFile: file instanceof TFile,
+	});
 	if (!(file instanceof TFile)) {
 		throw new Error(`Canvas file is no longer available: ${path}`);
 	}
@@ -293,25 +371,44 @@ function getCanvasFile(app: App, path: string): TFile {
 }
 
 async function readCanvasData(app: App, file: TFile): Promise<CanvasData> {
+	debugLog("canvas-read", "read canvas", {path: file.path});
 	const raw = await app.vault.read(file);
 	const parsed = JSON.parse(raw) as Partial<CanvasData>;
-	return {
+	const data = {
 		nodes: parsed.nodes ?? [],
 		edges: parsed.edges ?? [],
 	};
+	debugLog("canvas-read", "parsed canvas", {
+		path: file.path,
+		nodeCount: data.nodes.length,
+		edgeCount: data.edges.length,
+	});
+	return data;
 }
 
 async function writeCanvasData(app: App, file: TFile, data: CanvasData, view: CanvasViewLike): Promise<void> {
+	debugLog("canvas-write", "write canvas", {
+		path: file.path,
+		nodeCount: data.nodes.length,
+		edgeCount: data.edges.length,
+	});
 	await app.vault.modify(file, `${JSON.stringify(data, null, "\t")}\n`);
 	refreshCanvasView(view, data);
 }
 
 function refreshCanvasView(view: CanvasViewLike, data: CanvasData) {
 	try {
+		debugLog("canvas-refresh", "refresh active canvas view", {
+			viewFilePath: view.file?.path,
+			nodeCount: data.nodes.length,
+			edgeCount: data.edges.length,
+			hasImportData: Boolean(view.canvas?.importData),
+			hasRequestSave: Boolean(view.canvas?.requestSave),
+		});
 		view.canvas?.importData?.(data);
 		view.canvas?.requestSave?.();
 	} catch (error) {
-		console.warn("Canvas ACP could not refresh the active canvas view.", error);
+		debugWarn("canvas-refresh", "could not refresh active canvas view", error);
 	}
 }
 
@@ -323,4 +420,44 @@ function createCanvasId(): string {
 
 export function normalizeVaultPath(path: string): string {
 	return normalizePath(path).replace(/^\/+/, "");
+}
+
+function summarizeNode(node: CanvasNodeData) {
+	return {
+		id: node.id,
+		type: node.type,
+		file: node.file,
+		textLength: node.text?.length,
+		textPreview: node.text?.slice(0, 120),
+		x: node.x,
+		y: node.y,
+		width: node.width,
+		height: node.height,
+	};
+}
+
+function summarizeSelectionItem(item: CanvasSelectionItem) {
+	return {
+		id: item.id,
+		file: item.file,
+		path: item.path,
+		data: item.data ? summarizePartialNode(item.data) : undefined,
+		child: item.child ? summarizePartialNode(item.child) : undefined,
+		node: item.node ? summarizePartialNode(item.node) : undefined,
+		keys: Object.keys(item),
+	};
+}
+
+function summarizePartialNode(node: Partial<CanvasNodeData>) {
+	return {
+		id: node.id,
+		type: node.type,
+		file: node.file,
+		textLength: node.text?.length,
+		textPreview: node.text?.slice(0, 120),
+		x: node.x,
+		y: node.y,
+		width: node.width,
+		height: node.height,
+	};
 }

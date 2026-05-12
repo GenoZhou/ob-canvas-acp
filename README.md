@@ -21,6 +21,7 @@ Canvas ACP launches an ACP-compatible command over stdio. Configure it in **Sett
 - **Agent arguments**: arguments passed to that command, such as the path to an ACP adapter.
 - **Output folder**: reserved for generated Markdown note workflows.
 - **Note name template**: reserved for generated Markdown note workflows. Supports `{{source}}` and `{{question}}`.
+- **Debug logging**: prints selection, Canvas write, and ACP protocol diagnostics to the developer console.
 
 For example, if your ACP adapter is a JavaScript executable, set **Agent command** to your Node.js path and **Agent arguments** to the adapter path.
 

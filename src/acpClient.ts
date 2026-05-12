@@ -1,5 +1,6 @@
 import {spawn, ChildProcessWithoutNullStreams} from "child_process";
 import process from "process";
+import {debugError, debugLog, debugWarn} from "./debug";
 
 type JsonRpcId = number;
 
@@ -25,6 +26,19 @@ interface JsonRpcNotification {
 
 interface SessionNewResponse {
 	sessionId: string;
+}
+
+interface PromptParamsSummary {
+	sessionId?: string;
+	prompt?: Array<{
+		type?: string;
+		text?: string;
+		resource?: {
+			uri?: string;
+			text?: string;
+			mimeType?: string;
+		};
+	}>;
 }
 
 export interface AcpPromptResult {
@@ -56,9 +70,19 @@ export class AcpClient {
 		resources: Array<{uri: string; text: string; mimeType: string}>,
 		onChunk?: AcpChunkHandler,
 	): Promise<AcpPromptResult> {
+		debugLog("acp", "run prompt start", {
+			promptLength: prompt.length,
+			resourceCount: resources.length,
+			resources: resources.map((resource) => ({
+				uri: resource.uri,
+				mimeType: resource.mimeType,
+				textLength: resource.text.length,
+			})),
+		});
 		this.start();
 
 		try {
+			debugLog("acp", "initialize request");
 			await this.request("initialize", {
 				protocolVersion: 1,
 				clientCapabilities: {
@@ -75,19 +99,29 @@ export class AcpClient {
 				},
 			});
 
+			debugLog("acp", "new session request", {cwd: this.cwd});
 			const session = await this.request("session/new", {
 				cwd: this.cwd,
 				mcpServers: [],
 			}) as SessionNewResponse;
+			debugLog("acp", "new session response", {
+				sessionId: session.sessionId,
+			});
 
 			let response: {stopReason?: string};
 			try {
+				debugLog("acp", "session prompt request with embedded resources", {
+					sessionId: session.sessionId,
+					blockCount: 1 + resources.length,
+				});
 				response = await this.prompt(session.sessionId, buildPromptBlocks(prompt, resources), onChunk) as {stopReason?: string};
 			} catch (error) {
 				if (!(error instanceof JsonRpcError) || !error.isInvalidParams()) {
+					debugError("acp", "session prompt failed", error);
 					throw error;
 				}
 
+				debugWarn("acp", "embedded resource prompt rejected; retrying text-only prompt", error);
 				this.chunks = [];
 				response = await this.prompt(session.sessionId, [{
 					type: "text",
@@ -95,11 +129,16 @@ export class AcpClient {
 				}], onChunk) as {stopReason?: string};
 			}
 
+			debugLog("acp", "run prompt completed", {
+				textLength: this.chunks.join("").trim().length,
+				stopReason: response?.stopReason,
+			});
 			return {
 				text: this.chunks.join("").trim(),
 				stopReason: response?.stopReason,
 			};
 		} finally {
+			debugLog("acp", "dispose after prompt");
 			this.dispose();
 		}
 	}
@@ -109,6 +148,11 @@ export class AcpClient {
 			throw new Error("Set an ACP agent command in Canvas ACP settings first.");
 		}
 
+		debugLog("acp", "spawn agent", {
+			command: this.command,
+			args: this.args,
+			cwd: this.cwd,
+		});
 		this.process = spawn(this.command, this.args, {
 			cwd: this.cwd,
 			env: process.env,
@@ -119,11 +163,15 @@ export class AcpClient {
 		this.process.stdout.on("data", (data: string) => this.handleData(data));
 		this.process.stderr.on("data", (data: string) => {
 			if (data.trim()) {
-				console.warn(`Canvas ACP agent stderr: ${data}`);
+				debugWarn("acp", "agent stderr", data);
 			}
 		});
-		this.process.on("error", (error) => this.rejectAll(error));
+		this.process.on("error", (error) => {
+			debugError("acp", "agent process error", error);
+			this.rejectAll(error);
+		});
 		this.process.on("exit", (code, signal) => {
+			debugLog("acp", "agent process exit", {code, signal, pendingCount: this.pending.size});
 			if (this.pending.size > 0) {
 				this.rejectAll(new Error(`ACP agent exited before responding (${signal ?? code ?? "unknown"}).`));
 			}
@@ -138,6 +186,11 @@ export class AcpClient {
 			method,
 			params,
 		};
+		debugLog("acp-rpc", "send request", {
+			id,
+			method,
+			params: summarizeParams(method, params),
+		});
 
 		return new Promise((resolve, reject) => {
 			this.pending.set(id, {resolve, reject});
@@ -174,6 +227,7 @@ export class AcpClient {
 	}
 
 	private handleMessage(message: JsonRpcResponse | JsonRpcRequest | JsonRpcNotification) {
+		debugLog("acp-rpc", "receive message", summarizeMessage(message));
 		if ("id" in message) {
 			const pending = this.pending.get(message.id);
 			if (pending) {
@@ -199,6 +253,11 @@ export class AcpClient {
 
 	private handleSessionUpdate(params: unknown) {
 		const update = (params as {update?: {sessionUpdate?: string; content?: {type?: string; text?: string}}})?.update;
+		debugLog("acp", "session update", {
+			sessionUpdate: update?.sessionUpdate,
+			contentType: update?.content?.type,
+			textLength: update?.content?.text?.length,
+		});
 		if (update?.sessionUpdate === "agent_message_chunk" && update.content?.type === "text" && update.content.text) {
 			this.chunks.push(update.content.text);
 			this.onChunk?.(update.content.text, this.chunks.join(""));
@@ -207,6 +266,11 @@ export class AcpClient {
 
 	private respondToAgentRequest(message: JsonRpcRequest) {
 		let result: unknown = {};
+		debugLog("acp-rpc", "respond to agent request", {
+			id: message.id,
+			method: message.method,
+			params: summarizeParams(message.method, message.params),
+		});
 
 		if (message.method === "session/request_permission") {
 			result = {
@@ -224,6 +288,7 @@ export class AcpClient {
 	}
 
 	private rejectAll(error: Error) {
+		debugError("acp", "reject pending requests", error);
 		for (const pending of this.pending.values()) {
 			pending.reject(error);
 		}
@@ -239,6 +304,44 @@ export class AcpClient {
 		this.buffer = "";
 		this.onChunk = undefined;
 	}
+}
+
+function summarizeMessage(message: JsonRpcResponse | JsonRpcRequest | JsonRpcNotification) {
+	if ("method" in message) {
+		return {
+			id: "id" in message ? message.id : undefined,
+			method: message.method,
+			params: summarizeParams(message.method, message.params),
+		};
+	}
+
+	return {
+		id: message.id,
+		hasResult: message.result !== undefined,
+		error: message.error,
+	};
+}
+
+function summarizeParams(method: string, params: unknown): unknown {
+	if (!params || typeof params !== "object") {
+		return params;
+	}
+
+	if (method === "session/prompt") {
+		const promptParams = params as PromptParamsSummary;
+		return {
+			sessionId: promptParams.sessionId,
+			prompt: promptParams.prompt?.map((block) => ({
+				type: block.type,
+				textLength: block.text?.length,
+				resourceUri: block.resource?.uri,
+				resourceMimeType: block.resource?.mimeType,
+				resourceTextLength: block.resource?.text?.length,
+			})),
+		};
+	}
+
+	return params;
 }
 
 export function splitArgs(args: string): string[] {

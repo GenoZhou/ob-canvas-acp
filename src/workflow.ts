@@ -8,9 +8,12 @@ import {
 	updateCanvasTextNode,
 } from "./canvas";
 import {CanvasAcpSettings} from "./settings";
+import {debugError, debugLog} from "./debug";
 
 export async function askQuestionFromCanvasSelection(app: App, settings: CanvasAcpSettings): Promise<void> {
+	debugLog("workflow", "command invoked");
 	const selection = await getSelectedCanvasSource(app);
+	debugLog("workflow", "selection resolved", summarizeSelection(selection));
 	new AskQuestionModal(app, settings, selection).open();
 }
 
@@ -29,6 +32,7 @@ class AskQuestionModal extends Modal {
 	}
 
 	onOpen() {
+		debugLog("modal", "open", summarizeSelection(this.selection));
 		const {contentEl} = this;
 		contentEl.empty();
 		contentEl.addClass("canvas-acp-modal");
@@ -71,6 +75,7 @@ class AskQuestionModal extends Modal {
 	}
 
 	onClose() {
+		debugLog("modal", "close");
 		this.contentEl.empty();
 	}
 
@@ -82,12 +87,21 @@ class AskQuestionModal extends Modal {
 		this.isRunning = true;
 		this.updateSubmitState();
 		const question = this.question;
+		debugLog("modal", "submit", {
+			questionLength: question.length,
+			questionPreview: question.slice(0, 160),
+			selection: summarizeSelection(this.selection),
+		});
 		this.close();
 		void this.createResponseNodeAndStream(question);
 	}
 
 	private async createResponseNodeAndStream(question: string) {
 		try {
+			debugLog("workflow", "create response node start", {
+				questionLength: question.length,
+				selection: summarizeSelection(this.selection),
+			});
 			const target = await addStreamingTextNodeToCanvas(
 				this.app,
 				this.selection,
@@ -95,8 +109,10 @@ class AskQuestionModal extends Modal {
 				this.settings,
 				"Thinking...",
 			);
+			debugLog("workflow", "response node created", target);
 			await this.streamResponse(question, target);
 		} catch (error) {
+			debugError("workflow", "create response node failed", error);
 			new Notice(error instanceof Error ? error.message : "Canvas ACP failed.");
 		}
 	}
@@ -106,8 +122,19 @@ class AskQuestionModal extends Modal {
 		const canvasUpdate = createThrottledCanvasUpdate(this.app, target);
 
 		try {
+			debugLog("workflow", "stream response start", {
+				target,
+				questionLength: question.length,
+				selection: summarizeSelection(this.selection),
+			});
 			const prompt = buildPrompt(this.selection, question);
 			const basePath = getVaultBasePath(this.app);
+			debugLog("workflow", "vault base path resolved", {
+				basePath,
+				hasAgentCommand: this.settings.agentCommand.length > 0,
+				agentCommand: this.settings.agentCommand,
+				agentArgsLength: this.settings.agentArgs.length,
+			});
 			const client = new AcpClient(this.settings.agentCommand, splitArgs(this.settings.agentArgs), basePath);
 
 			const result = await client.runPrompt(prompt, [{
@@ -116,13 +143,22 @@ class AskQuestionModal extends Modal {
 				text: this.selection.sourceText,
 			}], (_chunk, fullText) => {
 				lastText = fullText.trimStart();
+				debugLog("workflow", "ACP chunk received", {
+					chunkedTextLength: lastText.length,
+					targetNodeId: target.nodeId,
+				});
 				canvasUpdate.schedule(lastText || "Thinking...");
 			});
 
 			lastText = result.text || lastText;
+			debugLog("workflow", "ACP prompt completed", {
+				finalLength: lastText.length,
+				stopReason: result.stopReason,
+			});
 			await canvasUpdate.flush();
 			await updateCanvasTextNode(this.app, target, lastText.trim() || "No response was returned by the ACP agent.");
 		} catch (error) {
+			debugError("workflow", "stream response failed", error);
 			await canvasUpdate.flush();
 			const message = error instanceof Error ? error.message : "Canvas ACP failed.";
 			await updateCanvasTextNode(this.app, target, `Canvas ACP failed:\n\n${message}`);
@@ -154,6 +190,11 @@ function createThrottledCanvasUpdate(app: App, target: CanvasTextNodeTarget): {
 	const writeQueuedText = () => {
 		const textToWrite = queuedText;
 		timeoutId = null;
+		debugLog("canvas-write", "scheduled text node flush", {
+			nodeId: target.nodeId,
+			canvasPath: target.canvasPath,
+			textLength: textToWrite.length,
+		});
 		lastWrite = lastWrite.then(() => updateCanvasTextNode(app, target, textToWrite));
 	};
 
@@ -161,6 +202,11 @@ function createThrottledCanvasUpdate(app: App, target: CanvasTextNodeTarget): {
 		schedule: (text: string) => {
 			queuedText = text;
 			if (timeoutId === null) {
+				debugLog("canvas-write", "schedule text node update", {
+					nodeId: target.nodeId,
+					canvasPath: target.canvasPath,
+					textLength: text.length,
+				});
 				timeoutId = window.setTimeout(writeQueuedText, 250);
 			}
 		},
@@ -203,4 +249,18 @@ function getVaultBasePath(app: App): string {
 	}
 
 	return basePath;
+}
+
+function summarizeSelection(selection: SelectedCanvasSource) {
+	return {
+		canvasPath: selection.canvasPath,
+		sourceFilePath: selection.sourceFile?.path,
+		sourceTitle: selection.sourceTitle,
+		sourceUri: selection.sourceUri,
+		sourceNodeId: selection.sourceNodeId,
+		sourceTextLength: selection.sourceText.length,
+		sourceTextPreview: selection.sourceText.slice(0, 160),
+		viewFilePath: selection.view.file?.path,
+		viewType: selection.view.getViewType?.(),
+	};
 }
