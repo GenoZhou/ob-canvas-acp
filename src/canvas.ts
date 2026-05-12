@@ -102,14 +102,19 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 	});
 
 	const selectedNodes = data.nodes.filter((node) => selectedIds.has(node.id) || (node.file && selectedFiles.has(node.file)));
-	const sourceNodes = selectedNodes.filter((node) => isSupportedSourceNode(node) || node.type === "group");
+	let sourceNodes = selectedNodes.filter((node) => isSupportedSourceNode(node) || node.type === "group");
 	debugLog("selection", "source node filter result", {
 		selectedNodes: selectedNodes.map(summarizeNode),
 		sourceNodes: sourceNodes.map(summarizeNode),
 	});
 
 	if (sourceNodes.length !== 1) {
-		throw new Error(`Select exactly one note, text, or group node on the active canvas. Found ${sourceNodes.length}.`);
+		const groupNode = sourceNodes.find((node) => node.type === "group");
+		if (groupNode) {
+			sourceNodes = [groupNode];
+		} else {
+			throw new Error(`Select exactly one note, text, or group node on the active canvas. Found ${sourceNodes.length}.`);
+		}
 	}
 
 	const selectedNode = sourceNodes[0]!;
@@ -269,7 +274,7 @@ function getCanvasSelection(view: CanvasViewLike, app: App): {selectedIds: Set<s
 		addDefined(selectedFiles, item.path);
 	}
 
-	const selectedElements = Array.from(view.containerEl?.querySelectorAll(".canvas-node.is-selected, .canvas-node.mod-selected, .canvas-node.is-focused") ?? []);
+	const selectedElements = Array.from(view.containerEl?.querySelectorAll(".canvas-node.is-selected, .canvas-node.mod-selected, .canvas-node.is-focused, .canvas-group.is-selected, .canvas-group.mod-selected, .canvas-group.is-focused") ?? []);
 	debugLog("selection", "dom selected nodes", {
 		count: selectedElements.length,
 		elements: selectedElements.map((element) => element instanceof HTMLElement ? {
