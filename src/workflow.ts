@@ -1,4 +1,4 @@
-import {App, Modal, Notice, Setting} from "obsidian";
+import {App, ButtonComponent, Modal, Notice} from "obsidian";
 import {AcpClient, splitArgs} from "./acpClient";
 import {
 	addStreamingTextNodeToCanvas,
@@ -32,46 +32,14 @@ class AskQuestionModal extends Modal {
 	}
 
 	onOpen() {
-		debugLog("modal", "open", summarizeSelection(this.selection));
-		const {contentEl} = this;
-		contentEl.empty();
-		contentEl.addClass("canvas-acp-modal");
-		contentEl.createEl("h2", {text: "Ask about this canvas node"});
-		contentEl.createEl("p", {
-			text: this.selection.sourceFile?.path ?? this.selection.sourceTitle,
-			cls: "canvas-acp-source",
-		});
-
-		new Setting(contentEl)
-			.setName("Question")
-			.setDesc("The question becomes the canvas edge label.")
-			.addTextArea((text) => {
-				text.inputEl.rows = 5;
-				text.setPlaceholder("What should this note help answer?");
-				text.onChange((value) => {
-					this.question = value.trim();
-					this.updateSubmitState();
-				});
-				window.setTimeout(() => text.inputEl.focus(), 0);
-			});
-
-		this.statusEl = contentEl.createDiv({cls: "canvas-acp-status"});
-
-		new Setting(contentEl)
-			.addButton((button) => {
-				this.submitButton = button.buttonEl;
-				button
-					.setButtonText("Ask")
-					.setCta()
-					.onClick(() => void this.submit());
-			})
-			.addButton((button) => {
-				button
-					.setButtonText("Cancel")
-					.onClick(() => this.close());
-			});
-
-		this.updateSubmitState();
+		try {
+			debugLog("modal", "open start", summarizeSelection(this.selection));
+			this.renderModal();
+			debugLog("modal", "open complete");
+		} catch (error) {
+			debugError("modal", "open failed", error);
+			throw error;
+		}
 	}
 
 	onClose() {
@@ -177,6 +145,55 @@ class AskQuestionModal extends Modal {
 			this.submitButton.disabled = !this.question || this.isRunning;
 		}
 	}
+
+	private renderModal() {
+		const {contentEl} = this;
+		contentEl.empty();
+		contentEl.addClass("canvas-acp-modal");
+
+		debugLog("modal", "render heading");
+		appendTextElement(contentEl, "h2", "Ask about this canvas node");
+		appendTextElement(contentEl, "p", getSelectionLabel(this.selection), "canvas-acp-source");
+
+		debugLog("modal", "render question field");
+		const field = contentEl.createDiv({cls: "canvas-acp-field"});
+		appendTextElement(field, "label", "Question", "canvas-acp-label");
+		appendTextElement(field, "p", "The question becomes the canvas edge label.", "canvas-acp-help");
+		const textarea = document.createElement("textarea");
+		textarea.rows = 5;
+		textarea.placeholder = "What should this note help answer?";
+		textarea.addEventListener("input", () => {
+			this.question = textarea.value.trim();
+			this.updateSubmitState();
+		});
+		field.appendChild(textarea);
+
+		this.statusEl = contentEl.createDiv({cls: "canvas-acp-status"});
+
+		debugLog("modal", "render actions");
+		const actions = contentEl.createDiv({cls: "canvas-acp-actions"});
+		const askButton = new ButtonComponent(actions)
+			.setButtonText("Ask")
+			.setCta()
+			.onClick(() => void this.submit());
+		this.submitButton = askButton.buttonEl;
+		new ButtonComponent(actions)
+			.setButtonText("Cancel")
+			.onClick(() => this.close());
+
+		this.updateSubmitState();
+		window.setTimeout(() => textarea.focus(), 0);
+	}
+}
+
+function appendTextElement(parent: HTMLElement, tagName: keyof HTMLElementTagNameMap, text: string, cls?: string): HTMLElement {
+	const element = document.createElement(tagName);
+	element.textContent = text;
+	if (cls) {
+		element.addClass(cls);
+	}
+	parent.appendChild(element);
+	return element;
 }
 
 function createThrottledCanvasUpdate(app: App, target: CanvasTextNodeTarget): {
@@ -238,6 +255,10 @@ function getSourceUri(selection: SelectedCanvasSource, basePath: string): string
 	}
 
 	return encodeURI(selection.sourceUri);
+}
+
+function getSelectionLabel(selection: SelectedCanvasSource): string {
+	return selection.sourceFile?.path ?? (selection.sourceTitle || selection.sourceUri || "Canvas node");
 }
 
 function getVaultBasePath(app: App): string {
