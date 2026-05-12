@@ -1,14 +1,5 @@
-.canvas-acp-modal textarea {
+.canvas-acp-modal input[type="text"] {
 	width: 100%;
-	min-height: 80px;
-	resize: vertical;
-	margin-top: 12px;
-}
-
-.canvas-acp-source {
-	color: var(--text-muted);
-	font-size: var(--font-ui-small);
-	margin-top: -8px;
 }
 
 .canvas-acp-actions {

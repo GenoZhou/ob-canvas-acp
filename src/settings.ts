@@ -4,8 +4,6 @@ import CanvasAcpPlugin from "./main";
 export interface CanvasAcpSettings {
 	agentCommand: string;
 	agentArgs: string;
-	outputFolder: string;
-	noteNameTemplate: string;
 	nodeWidth: number;
 	nodeHeight: number;
 	debugLogging: boolean;
@@ -14,8 +12,6 @@ export interface CanvasAcpSettings {
 export const DEFAULT_SETTINGS: CanvasAcpSettings = {
 	agentCommand: "",
 	agentArgs: "",
-	outputFolder: "Canvas questions",
-	noteNameTemplate: "{{source}} - {{question}}",
 	nodeWidth: 420,
 	nodeHeight: 260,
 	debugLogging: true,
@@ -55,28 +51,6 @@ export class CanvasAcpSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.agentArgs)
 				.onChange(async (value) => {
 					this.plugin.settings.agentArgs = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName("Output folder")
-			.setDesc("Folder for notes generated from canvas questions.")
-			.addText((text) => text
-				.setPlaceholder("Canvas questions")
-				.setValue(this.plugin.settings.outputFolder)
-				.onChange(async (value) => {
-					this.plugin.settings.outputFolder = value.trim();
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName("Note name template")
-			.setDesc("Use {{source}} and {{question}}.")
-			.addText((text) => text
-				.setPlaceholder("{{source}} - {{question}}")
-				.setValue(this.plugin.settings.noteNameTemplate)
-				.onChange(async (value) => {
-					this.plugin.settings.noteNameTemplate = value.trim() || DEFAULT_SETTINGS.noteNameTemplate;
 					await this.plugin.saveSettings();
 				}));
 

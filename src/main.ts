@@ -15,7 +15,7 @@ export default class CanvasAcpPlugin extends Plugin {
 		});
 
 		this.addCommand({
-			id: "ask-question-about-canvas-note",
+			id: "ask-question-about-canvas-node",
 			name: "Ask question about canvas node",
 			checkCallback: (checking: boolean) => {
 				const activeView = this.app.workspace.getActiveViewOfType(ItemView);
@@ -66,8 +66,6 @@ function summarizeSettings(settings: CanvasAcpSettings) {
 		hasAgentCommand: agentCommand.length > 0,
 		agentCommand,
 		agentArgsLength: agentArgs.length,
-		outputFolder: settings.outputFolder,
-		noteNameTemplate: settings.noteNameTemplate,
 		nodeWidth: settings.nodeWidth,
 		nodeHeight: settings.nodeHeight,
 		debugLogging: settings.debugLogging,

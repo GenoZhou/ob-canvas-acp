@@ -163,20 +163,16 @@ class AskQuestionModal extends Modal {
 		contentEl.empty();
 		contentEl.addClass("canvas-acp-modal");
 
-		debugLog("modal", "render heading");
-		appendTextElement(contentEl, "h2", "Ask about this canvas node");
-		appendTextElement(contentEl, "p", getSelectionLabel(this.canvasSource), "canvas-acp-source");
-
-		debugLog("modal", "render question field");
-		const textarea = document.createElement("textarea");
-		textarea.rows = 3;
-		textarea.placeholder = "Ask a question... (Enter to submit)";
-		textarea.addEventListener("input", () => {
-			this.question = textarea.value.trim();
+		debugLog("modal", "render input");
+		const input = document.createElement("input");
+		input.type = "text";
+		input.placeholder = "Ask a question...";
+		input.addEventListener("input", () => {
+			this.question = input.value.trim();
 			this.updateSubmitState();
 		});
-		textarea.addEventListener("keydown", (event) => {
-			if (event.key === "Enter" && !event.shiftKey) {
+		input.addEventListener("keydown", (event) => {
+			if (event.key === "Enter") {
 				event.preventDefault();
 				void this.submit();
 			}
@@ -185,7 +181,7 @@ class AskQuestionModal extends Modal {
 				this.close();
 			}
 		});
-		contentEl.appendChild(textarea);
+		contentEl.appendChild(input);
 
 		const actions = contentEl.createDiv({cls: "canvas-acp-actions"});
 		const askButton = new ButtonComponent(actions)
@@ -198,7 +194,7 @@ class AskQuestionModal extends Modal {
 			.onClick(() => this.close());
 
 		this.updateSubmitState();
-		window.setTimeout(() => textarea.focus(), 0);
+		window.setTimeout(() => input.focus(), 0);
 	}
 }
 

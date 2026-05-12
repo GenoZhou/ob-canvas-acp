@@ -249,55 +249,6 @@ function addDefined(values: Set<string>, value: string | undefined) {
 	}
 }
 
-export async function addGeneratedNoteToCanvas(
-	app: App,
-	selection: SelectedCanvasSource,
-	newNote: TFile,
-	question: string,
-	settings: CanvasAcpSettings,
-) {
-	const canvasPath = resolveCanvasPath(app, selection.canvasPath, selection.view);
-	debugLog("canvas-write", "add generated note node", {
-		canvasPath,
-		sourceNodeId: selection.sourceNodeId,
-		newNotePath: newNote.path,
-		questionLength: question.length,
-	});
-	const canvasFile = getCanvasFile(app, canvasPath);
-	const data = await readCanvasData(app, canvasFile);
-	const sourceNode = data.nodes.find((node) => node.id === selection.sourceNodeId);
-
-	if (!sourceNode) {
-		throw new Error("The selected canvas node could not be found.");
-	}
-
-	const targetNode: CanvasNodeData = {
-		id: createCanvasId(),
-		type: "file",
-		file: newNote.path,
-		x: sourceNode.x + sourceNode.width + 180,
-		y: sourceNode.y,
-		width: settings.nodeWidth,
-		height: settings.nodeHeight,
-	};
-
-	const edge: CanvasEdgeData = {
-		id: createCanvasId(),
-		fromNode: sourceNode.id,
-		fromSide: "right",
-		toNode: targetNode.id,
-		toSide: "left",
-		label: question,
-	};
-
-	data.nodes.push(targetNode);
-	data.edges.push(edge);
-
-	await app.vault.modify(canvasFile, `${JSON.stringify(data, null, "\t")}\n`);
-	selection.view.canvas?.importData?.(data);
-	selection.view.canvas?.requestSave?.();
-}
-
 export async function addStreamingTextNodeToCanvas(
 	app: App,
 	selection: SelectedCanvasSource,
@@ -457,10 +408,6 @@ function createCanvasId(): string {
 	const bytes = new Uint8Array(8);
 	crypto.getRandomValues(bytes);
 	return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-export function normalizeVaultPath(path: string): string {
-	return normalizePath(path).replace(/^\/+/, "");
 }
 
 function summarizeNode(node: CanvasNodeData) {
