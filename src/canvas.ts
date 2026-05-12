@@ -56,6 +56,12 @@ export interface SelectedCanvasSource {
 	view: CanvasViewLike;
 }
 
+export interface CanvasTextNodeTarget {
+	canvasFile: TFile;
+	nodeId: string;
+	view: CanvasViewLike;
+}
+
 export function getActiveCanvasView(app: App): CanvasViewLike {
 	const view = app.workspace.getActiveViewOfType(ItemView) as CanvasViewLike | null;
 	if (view?.getViewType?.() !== "canvas" || !view.file) {
@@ -208,6 +214,63 @@ export async function addGeneratedNoteToCanvas(
 	selection.view.canvas?.requestSave?.();
 }
 
+export async function addStreamingTextNodeToCanvas(
+	app: App,
+	selection: SelectedCanvasSource,
+	question: string,
+	settings: CanvasAcpSettings,
+	initialText: string,
+): Promise<CanvasTextNodeTarget> {
+	const data = await readCanvasData(app, selection.canvasFile);
+	const sourceNode = data.nodes.find((node) => node.id === selection.sourceNodeId);
+
+	if (!sourceNode) {
+		throw new Error("The selected canvas node could not be found.");
+	}
+
+	const targetNode: CanvasNodeData = {
+		id: createCanvasId("node"),
+		type: "text",
+		text: initialText,
+		x: sourceNode.x + sourceNode.width + 180,
+		y: sourceNode.y,
+		width: settings.nodeWidth,
+		height: settings.nodeHeight,
+	};
+
+	const edge: CanvasEdgeData = {
+		id: createCanvasId("edge"),
+		fromNode: sourceNode.id,
+		fromSide: "right",
+		toNode: targetNode.id,
+		toSide: "left",
+		label: question,
+	};
+
+	data.nodes.push(targetNode);
+	data.edges.push(edge);
+
+	await writeCanvasData(app, selection.canvasFile, data, selection.view);
+
+	return {
+		canvasFile: selection.canvasFile,
+		nodeId: targetNode.id,
+		view: selection.view,
+	};
+}
+
+export async function updateCanvasTextNode(app: App, target: CanvasTextNodeTarget, text: string): Promise<void> {
+	const data = await readCanvasData(app, target.canvasFile);
+	const node = data.nodes.find((canvasNode) => canvasNode.id === target.nodeId);
+
+	if (!node) {
+		throw new Error("The generated canvas text node could not be found.");
+	}
+
+	node.text = text;
+	await writeCanvasData(app, target.canvasFile, data, target.view);
+}
+
 async function readCanvasData(app: App, file: TFile): Promise<CanvasData> {
 	const raw = await app.vault.read(file);
 	const parsed = JSON.parse(raw) as Partial<CanvasData>;
@@ -215,6 +278,12 @@ async function readCanvasData(app: App, file: TFile): Promise<CanvasData> {
 		nodes: parsed.nodes ?? [],
 		edges: parsed.edges ?? [],
 	};
+}
+
+async function writeCanvasData(app: App, file: TFile, data: CanvasData, view: CanvasViewLike): Promise<void> {
+	await app.vault.modify(file, `${JSON.stringify(data, null, "\t")}\n`);
+	view.canvas?.importData?.(data);
+	view.canvas?.requestSave?.();
 }
 
 function createCanvasId(prefix: string): string {

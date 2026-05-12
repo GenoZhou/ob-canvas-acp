@@ -1,7 +1,12 @@
 import {App, Modal, Notice, Setting} from "obsidian";
 import {AcpClient, splitArgs} from "./acpClient";
-import {addGeneratedNoteToCanvas, getSelectedCanvasSource, SelectedCanvasSource} from "./canvas";
-import {createGeneratedNote} from "./noteFactory";
+import {
+	addStreamingTextNodeToCanvas,
+	CanvasTextNodeTarget,
+	getSelectedCanvasSource,
+	SelectedCanvasSource,
+	updateCanvasTextNode,
+} from "./canvas";
 import {CanvasAcpSettings} from "./settings";
 
 export async function askQuestionFromCanvasSelection(app: App, settings: CanvasAcpSettings): Promise<void> {
@@ -76,36 +81,54 @@ class AskQuestionModal extends Modal {
 
 		this.isRunning = true;
 		this.updateSubmitState();
-		this.setStatus("Reading source...");
+		this.setStatus("Creating response node...");
 
 		try {
-			const prompt = buildPrompt(this.selection, this.question);
-			const basePath = getVaultBasePath(this.app);
-			const client = new AcpClient(this.settings.agentCommand, splitArgs(this.settings.agentArgs), basePath);
-
-			this.setStatus("Asking ACP agent...");
-			const result = await client.runPrompt(prompt, [{
-				uri: getSourceUri(this.selection, basePath),
-				mimeType: "text/markdown",
-				text: this.selection.sourceText,
-			}]);
-
-			this.setStatus("Creating note and updating canvas...");
-			const note = await createGeneratedNote(this.app, {
-				title: this.selection.sourceTitle,
-				path: this.selection.sourceFile?.path,
-				canvasNodeId: this.selection.sourceNodeId,
-			}, this.question, result.text, this.settings);
-			await addGeneratedNoteToCanvas(this.app, this.selection, note, this.question, this.settings);
-
-			new Notice(`Created ${note.path}`);
+			const question = this.question;
+			const target = await addStreamingTextNodeToCanvas(
+				this.app,
+				this.selection,
+				question,
+				this.settings,
+				"Thinking...",
+			);
 			this.close();
+			void this.streamResponse(question, target);
 		} catch (error) {
 			this.setStatus(error instanceof Error ? error.message : "Canvas ACP failed.");
 			new Notice(error instanceof Error ? error.message : "Canvas ACP failed.");
 		} finally {
 			this.isRunning = false;
 			this.updateSubmitState();
+		}
+	}
+
+	private async streamResponse(question: string, target: CanvasTextNodeTarget) {
+		let lastText = "";
+		const canvasUpdate = createThrottledCanvasUpdate(this.app, target);
+
+		try {
+			const prompt = buildPrompt(this.selection, question);
+			const basePath = getVaultBasePath(this.app);
+			const client = new AcpClient(this.settings.agentCommand, splitArgs(this.settings.agentArgs), basePath);
+
+			const result = await client.runPrompt(prompt, [{
+				uri: getSourceUri(this.selection, basePath),
+				mimeType: "text/markdown",
+				text: this.selection.sourceText,
+			}], (_chunk, fullText) => {
+				lastText = fullText.trimStart();
+				canvasUpdate.schedule(lastText || "Thinking...");
+			});
+
+			lastText = result.text || lastText;
+			await canvasUpdate.flush();
+			await updateCanvasTextNode(this.app, target, lastText.trim() || "No response was returned by the ACP agent.");
+		} catch (error) {
+			await canvasUpdate.flush();
+			const message = error instanceof Error ? error.message : "Canvas ACP failed.";
+			await updateCanvasTextNode(this.app, target, `Canvas ACP failed:\n\n${message}`);
+			new Notice(message);
 		}
 	}
 
@@ -120,6 +143,37 @@ class AskQuestionModal extends Modal {
 			this.submitButton.disabled = !this.question || this.isRunning;
 		}
 	}
+}
+
+function createThrottledCanvasUpdate(app: App, target: CanvasTextNodeTarget): {
+	schedule: (text: string) => void;
+	flush: () => Promise<void>;
+} {
+	let queuedText = "";
+	let timeoutId: number | null = null;
+	let lastWrite = Promise.resolve();
+
+	const writeQueuedText = () => {
+		const textToWrite = queuedText;
+		timeoutId = null;
+		lastWrite = lastWrite.then(() => updateCanvasTextNode(app, target, textToWrite));
+	};
+
+	return {
+		schedule: (text: string) => {
+			queuedText = text;
+			if (timeoutId === null) {
+				timeoutId = window.setTimeout(writeQueuedText, 250);
+			}
+		},
+		flush: async () => {
+			if (timeoutId !== null) {
+				window.clearTimeout(timeoutId);
+				writeQueuedText();
+			}
+			await lastWrite;
+		},
+	};
 }
 
 function buildPrompt(selection: SelectedCanvasSource, question: string): string {

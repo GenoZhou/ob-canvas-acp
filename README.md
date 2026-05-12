@@ -7,11 +7,11 @@ The workflow is:
 1. Open a canvas and select one note node or text node.
 2. Run **Ask question about canvas node** from the command palette, ribbon, or a hotkey you assign in Obsidian.
 3. Enter a question in the modal.
-4. The plugin sends the selected note content and question to the configured ACP agent.
-5. The agent response is saved as a new Markdown note.
-6. The new note is added to the canvas and connected to the source note. The question is written on the edge label.
+4. The modal closes and a new response text node is added to the canvas.
+5. The plugin sends the selected node content and question to the configured ACP agent.
+6. The agent response streams into the new text node. The question is written on the edge label.
 
-This is designed for canvas-based research flows where notes become context nodes and questions become labeled transitions between generated notes.
+This is designed for canvas-based research flows where notes and text blocks become context nodes and questions become labeled transitions between generated responses.
 
 ## ACP setup
 
@@ -19,8 +19,8 @@ Canvas ACP launches an ACP-compatible command over stdio. Configure it in **Sett
 
 - **Agent command**: executable path, such as `node`, `gemini`, or an absolute path to another ACP agent command.
 - **Agent arguments**: arguments passed to that command, such as the path to an ACP adapter.
-- **Output folder**: where generated Markdown notes are created.
-- **Note name template**: supports `{{source}}` and `{{question}}`.
+- **Output folder**: reserved for generated Markdown note workflows.
+- **Note name template**: reserved for generated Markdown note workflows. Supports `{{source}}` and `{{question}}`.
 
 For example, if your ACP adapter is a JavaScript executable, set **Agent command** to your Node.js path and **Agent arguments** to the adapter path.
 

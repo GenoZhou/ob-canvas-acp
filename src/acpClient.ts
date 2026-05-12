@@ -32,6 +32,8 @@ export interface AcpPromptResult {
 	stopReason?: string;
 }
 
+export type AcpChunkHandler = (text: string, fullText: string) => void;
+
 export class AcpClient {
 	private process: ChildProcessWithoutNullStreams | null = null;
 	private nextId = 0;
@@ -41,6 +43,7 @@ export class AcpClient {
 		reject: (error: Error) => void;
 	}>();
 	private chunks: string[] = [];
+	private onChunk: AcpChunkHandler | undefined;
 
 	constructor(
 		private readonly command: string,
@@ -48,7 +51,11 @@ export class AcpClient {
 		private readonly cwd: string,
 	) {}
 
-	async runPrompt(prompt: string, resources: Array<{uri: string; text: string; mimeType: string}>): Promise<AcpPromptResult> {
+	async runPrompt(
+		prompt: string,
+		resources: Array<{uri: string; text: string; mimeType: string}>,
+		onChunk?: AcpChunkHandler,
+	): Promise<AcpPromptResult> {
 		this.start();
 
 		try {
@@ -75,7 +82,7 @@ export class AcpClient {
 
 			let response: {stopReason?: string};
 			try {
-				response = await this.prompt(session.sessionId, buildPromptBlocks(prompt, resources)) as {stopReason?: string};
+				response = await this.prompt(session.sessionId, buildPromptBlocks(prompt, resources), onChunk) as {stopReason?: string};
 			} catch (error) {
 				if (!(error instanceof JsonRpcError) || !error.isInvalidParams()) {
 					throw error;
@@ -85,7 +92,7 @@ export class AcpClient {
 				response = await this.prompt(session.sessionId, [{
 					type: "text",
 					text: buildTextOnlyPrompt(prompt, resources),
-				}]) as {stopReason?: string};
+				}], onChunk) as {stopReason?: string};
 			}
 
 			return {
@@ -138,11 +145,12 @@ export class AcpClient {
 		});
 	}
 
-	private prompt(sessionId: string, prompt: unknown[]): Promise<unknown> {
+	private prompt(sessionId: string, prompt: unknown[], onChunk?: AcpChunkHandler): Promise<unknown> {
 		if (!sessionId) {
 			throw new Error("ACP agent did not return a sessionId.");
 		}
 
+		this.onChunk = onChunk;
 		return this.request("session/prompt", {
 			sessionId,
 			prompt,
@@ -193,6 +201,7 @@ export class AcpClient {
 		const update = (params as {update?: {sessionUpdate?: string; content?: {type?: string; text?: string}}})?.update;
 		if (update?.sessionUpdate === "agent_message_chunk" && update.content?.type === "text" && update.content.text) {
 			this.chunks.push(update.content.text);
+			this.onChunk?.(update.content.text, this.chunks.join(""));
 		}
 	}
 
@@ -228,6 +237,7 @@ export class AcpClient {
 		this.process = null;
 		this.pending.clear();
 		this.buffer = "";
+		this.onChunk = undefined;
 	}
 }
 
