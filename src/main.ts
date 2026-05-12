@@ -60,10 +60,12 @@ export default class CanvasAcpPlugin extends Plugin {
 }
 
 function summarizeSettings(settings: CanvasAcpSettings) {
+	const agentCommand = settings.agentCommand ?? "";
+	const agentArgs = settings.agentArgs ?? "";
 	return {
-		hasAgentCommand: settings.agentCommand.length > 0,
-		agentCommand: settings.agentCommand,
-		agentArgsLength: settings.agentArgs.length,
+		hasAgentCommand: agentCommand.length > 0,
+		agentCommand,
+		agentArgsLength: agentArgs.length,
 		outputFolder: settings.outputFolder,
 		noteNameTemplate: settings.noteNameTemplate,
 		nodeWidth: settings.nodeWidth,

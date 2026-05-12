@@ -108,7 +108,7 @@ class AskQuestionModal extends Modal {
 			const result = await client.runPrompt(prompt, [{
 				uri: getSourceUri(this.selection, basePath),
 				mimeType: "text/markdown",
-				text: this.selection.sourceText,
+				text: this.selection.sourceText ?? "",
 			}], (_chunk, fullText) => {
 				lastText = fullText.trimStart();
 				debugLog("workflow", "ACP chunk received", {
@@ -244,7 +244,7 @@ function buildPrompt(selection: SelectedCanvasSource, question: string): string 
 		"Create a concise but useful Markdown note body.",
 		"Do not include YAML frontmatter, file names, or code fences around the full answer.",
 		"",
-		`Source: ${selection.sourceFile?.path ?? selection.sourceTitle}`,
+		`Source: ${selection.sourceFile?.path ?? selection.sourceTitle ?? selection.sourceUri ?? "Canvas node"}`,
 		`Question: ${question}`,
 	].join("\n");
 }
@@ -254,7 +254,7 @@ function getSourceUri(selection: SelectedCanvasSource, basePath: string): string
 		return encodeURI(`file://${basePath}/${selection.sourceFile.path}`);
 	}
 
-	return encodeURI(selection.sourceUri);
+	return encodeURI(selection.sourceUri ?? "canvas://unknown");
 }
 
 function getSelectionLabel(selection: SelectedCanvasSource): string {
@@ -273,15 +273,16 @@ function getVaultBasePath(app: App): string {
 }
 
 function summarizeSelection(selection: SelectedCanvasSource) {
+	const sourceText = selection.sourceText ?? "";
 	return {
 		canvasPath: selection.canvasPath,
 		sourceFilePath: selection.sourceFile?.path,
 		sourceTitle: selection.sourceTitle,
 		sourceUri: selection.sourceUri,
 		sourceNodeId: selection.sourceNodeId,
-		sourceTextLength: selection.sourceText.length,
-		sourceTextPreview: selection.sourceText.slice(0, 160),
-		viewFilePath: selection.view.file?.path,
-		viewType: selection.view.getViewType?.(),
+		sourceTextLength: sourceText.length,
+		sourceTextPreview: sourceText.slice(0, 160),
+		viewFilePath: selection.view?.file?.path,
+		viewType: selection.view?.getViewType?.(),
 	};
 }

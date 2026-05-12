@@ -70,13 +70,14 @@ export class AcpClient {
 		resources: Array<{uri: string; text: string; mimeType: string}>,
 		onChunk?: AcpChunkHandler,
 	): Promise<AcpPromptResult> {
+		const safeResources = resources ?? [];
 		debugLog("acp", "run prompt start", {
-			promptLength: prompt.length,
-			resourceCount: resources.length,
-			resources: resources.map((resource) => ({
+			promptLength: prompt?.length ?? 0,
+			resourceCount: safeResources.length,
+			resources: safeResources.map((resource) => ({
 				uri: resource.uri,
 				mimeType: resource.mimeType,
-				textLength: resource.text.length,
+				textLength: resource.text?.length ?? 0,
 			})),
 		});
 		this.start();
