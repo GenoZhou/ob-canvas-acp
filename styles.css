@@ -8,20 +8,20 @@
 	margin-bottom: 8px;
 }
 
-.canvas-acp-preview {
-	margin-top: 8px;
+.canvas-acp-prompt-label {
+	display: block;
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-semibold);
+	margin-top: 12px;
+	margin-bottom: 4px;
 }
 
-.canvas-acp-preview pre {
-	white-space: pre-wrap;
-	word-break: break-word;
+.canvas-acp-prompt {
+	width: 100%;
+	min-height: 120px;
+	resize: vertical;
+	font-family: var(--font-monospace);
 	font-size: var(--font-ui-smaller);
-	max-height: 200px;
-	overflow: auto;
-	background: var(--background-secondary);
-	padding: 8px;
-	border-radius: 4px;
-	margin: 4px 0 0;
 }
 
 .canvas-acp-actions {

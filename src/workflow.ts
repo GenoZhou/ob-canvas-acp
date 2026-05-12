@@ -19,6 +19,7 @@ export async function askQuestionFromCanvasSelection(app: App, settings: CanvasA
 
 class AskQuestionModal extends Modal {
 	private question = "";
+	private promptPreview = "";
 	private submitButton: HTMLButtonElement | null = null;
 	private statusEl: HTMLElement | null = null;
 	private isRunning = false;
@@ -61,6 +62,8 @@ class AskQuestionModal extends Modal {
 		this.isRunning = true;
 		this.updateSubmitState();
 		const question = this.question;
+		const promptTextarea = this.contentEl.querySelector(".canvas-acp-prompt") as HTMLTextAreaElement | null;
+		this.promptPreview = promptTextarea?.value ?? "";
 		debugLog("modal", "submit", {
 			questionLength: question.length,
 			questionPreview: question.slice(0, 160),
@@ -107,7 +110,7 @@ class AskQuestionModal extends Modal {
 				questionLength: question.length,
 				selection: summarizeSelection(this.canvasSource),
 			});
-			const prompt = buildPrompt(this.canvasSource, question, this.settings.includeThinking);
+			const prompt = this.promptPreview || buildPrompt(this.canvasSource, question, this.settings.includeThinking);
 			const basePath = getVaultBasePath(this.app);
 			debugLog("workflow", "vault base path resolved", {
 				basePath,
@@ -179,24 +182,20 @@ class AskQuestionModal extends Modal {
 		input.type = "text";
 		input.placeholder = "Ask a question...";
 
-		const previewDetails = contentEl.createEl("details", {cls: "canvas-acp-preview"});
-		previewDetails.createEl("summary", {text: "Preview prompt"});
-		const previewPre = previewDetails.createEl("pre");
-		previewDetails.style.display = "none";
+		const promptLabel = contentEl.createEl("label", {text: "Prompt", cls: "canvas-acp-prompt-label"});
+		const promptTextarea = document.createElement("textarea");
+		promptTextarea.rows = 6;
+		promptTextarea.classList.add("canvas-acp-prompt");
 
-		const updatePreview = () => {
-			if (this.question) {
-				previewPre.setText(buildPrompt(this.canvasSource, this.question, this.settings.includeThinking));
-				previewDetails.style.display = "";
-			} else {
-				previewDetails.style.display = "none";
-			}
+		const updatePrompt = () => {
+			this.promptPreview = buildPrompt(this.canvasSource, this.question, this.settings.includeThinking);
+			promptTextarea.value = this.promptPreview;
 		};
 
 		input.addEventListener("input", () => {
 			this.question = input.value.trim();
 			this.updateSubmitState();
-			updatePreview();
+			updatePrompt();
 		});
 		input.addEventListener("keydown", (event) => {
 			if (event.key === "Enter") {
@@ -209,7 +208,11 @@ class AskQuestionModal extends Modal {
 			}
 		});
 		contentEl.appendChild(input);
-		contentEl.appendChild(previewDetails);
+		contentEl.appendChild(promptLabel);
+		contentEl.appendChild(promptTextarea);
+
+		// Initialize prompt even when question is empty
+		updatePrompt();
 
 		const actions = contentEl.createDiv({cls: "canvas-acp-actions"});
 		const askButton = new ButtonComponent(actions)
