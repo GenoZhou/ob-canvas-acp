@@ -14,7 +14,7 @@ interface JsonRpcResponse {
 	jsonrpc: "2.0";
 	id: JsonRpcId;
 	result?: unknown;
-	error?: {message?: string; code?: number};
+	error?: {message?: string; code?: number; data?: unknown};
 }
 
 interface JsonRpcNotification {
@@ -73,18 +73,20 @@ export class AcpClient {
 				mcpServers: [],
 			}) as SessionNewResponse;
 
-			const promptBlocks = [
-				{text: prompt, type: "text"},
-				...resources.map((resource) => ({
-					type: "resource",
-					resource,
-				})),
-			];
+			let response: {stopReason?: string};
+			try {
+				response = await this.prompt(session.sessionId, buildPromptBlocks(prompt, resources)) as {stopReason?: string};
+			} catch (error) {
+				if (!(error instanceof JsonRpcError) || !error.isInvalidParams()) {
+					throw error;
+				}
 
-			const response = await this.request("session/prompt", {
-				sessionId: session.sessionId,
-				prompt: promptBlocks,
-			}) as {stopReason?: string};
+				this.chunks = [];
+				response = await this.prompt(session.sessionId, [{
+					type: "text",
+					text: buildTextOnlyPrompt(prompt, resources),
+				}]) as {stopReason?: string};
+			}
 
 			return {
 				text: this.chunks.join("").trim(),
@@ -136,6 +138,17 @@ export class AcpClient {
 		});
 	}
 
+	private prompt(sessionId: string, prompt: unknown[]): Promise<unknown> {
+		if (!sessionId) {
+			throw new Error("ACP agent did not return a sessionId.");
+		}
+
+		return this.request("session/prompt", {
+			sessionId,
+			prompt,
+		});
+	}
+
 	private handleData(data: string) {
 		this.buffer += data;
 
@@ -158,7 +171,7 @@ export class AcpClient {
 			if (pending) {
 				this.pending.delete(message.id);
 				if ("error" in message && message.error) {
-					pending.reject(new Error(message.error.message ?? `ACP error ${message.error.code ?? ""}`.trim()));
+					pending.reject(new JsonRpcError(message.error.message, message.error.code, message.error.data));
 				} else {
 					pending.resolve(("result" in message) ? message.result : undefined);
 				}
@@ -226,4 +239,42 @@ export function splitArgs(args: string): string[] {
 
 		return arg;
 	}) ?? [];
+}
+
+class JsonRpcError extends Error {
+	constructor(message: string | undefined, readonly code: number | undefined, readonly data: unknown) {
+		const dataText = data ? ` ${JSON.stringify(data)}` : "";
+		super(`${message ?? `ACP error ${code ?? ""}`.trim()}${dataText}`);
+	}
+
+	isInvalidParams(): boolean {
+		return this.code === -32602 || this.message.toLowerCase().includes("invalid params");
+	}
+}
+
+function buildPromptBlocks(prompt: string, resources: Array<{uri: string; text: string; mimeType: string}>): unknown[] {
+	return [
+		{text: prompt, type: "text"},
+		...resources.map((resource) => ({
+			type: "resource",
+			resource,
+		})),
+	];
+}
+
+function buildTextOnlyPrompt(prompt: string, resources: Array<{uri: string; text: string; mimeType: string}>): string {
+	if (resources.length === 0) {
+		return prompt;
+	}
+
+	return [
+		prompt,
+		"",
+		"Context:",
+		...resources.map((resource) => [
+			`<resource uri="${resource.uri}" mimeType="${resource.mimeType}">`,
+			resource.text,
+			"</resource>",
+		].join("\n")),
+	].join("\n");
 }

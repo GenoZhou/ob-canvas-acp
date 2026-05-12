@@ -1,7 +1,7 @@
 {
 	"id": "ob-canvas-acp",
 	"name": "Canvas ACP",
-	"version": "1.0.1-beta.1",
+	"version": "1.0.1-beta.2",
 	"minAppVersion": "0.15.0",
 	"description": "Ask an ACP agent a question about a canvas note, then add the generated note back to the canvas.",
 	"author": "",
