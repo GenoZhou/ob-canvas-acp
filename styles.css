@@ -1,23 +1,8 @@
 .canvas-acp-modal textarea {
 	width: 100%;
-	min-height: 120px;
+	min-height: 80px;
 	resize: vertical;
-}
-
-.canvas-acp-field {
-	margin: 18px 0;
-}
-
-.canvas-acp-label {
-	display: block;
-	font-weight: var(--font-semibold);
-	margin-bottom: 4px;
-}
-
-.canvas-acp-help {
-	color: var(--text-muted);
-	font-size: var(--font-ui-small);
-	margin: 0 0 8px;
+	margin-top: 12px;
 }
 
 .canvas-acp-source {
@@ -26,15 +11,9 @@
 	margin-top: -8px;
 }
 
-.canvas-acp-status {
-	color: var(--text-muted);
-	font-size: var(--font-ui-small);
-	min-height: 22px;
-	padding: 4px 0;
-}
-
 .canvas-acp-actions {
 	display: flex;
 	gap: 8px;
 	justify-content: flex-end;
+	margin-top: 12px;
 }

@@ -168,21 +168,25 @@ class AskQuestionModal extends Modal {
 		appendTextElement(contentEl, "p", getSelectionLabel(this.canvasSource), "canvas-acp-source");
 
 		debugLog("modal", "render question field");
-		const field = contentEl.createDiv({cls: "canvas-acp-field"});
-		appendTextElement(field, "label", "Question", "canvas-acp-label");
-		appendTextElement(field, "p", "The question becomes the canvas edge label.", "canvas-acp-help");
 		const textarea = document.createElement("textarea");
-		textarea.rows = 5;
-		textarea.placeholder = "What should this note help answer?";
+		textarea.rows = 3;
+		textarea.placeholder = "Ask a question... (Enter to submit)";
 		textarea.addEventListener("input", () => {
 			this.question = textarea.value.trim();
 			this.updateSubmitState();
 		});
-		field.appendChild(textarea);
+		textarea.addEventListener("keydown", (event) => {
+			if (event.key === "Enter" && !event.shiftKey) {
+				event.preventDefault();
+				void this.submit();
+			}
+			if (event.key === "Escape") {
+				event.preventDefault();
+				this.close();
+			}
+		});
+		contentEl.appendChild(textarea);
 
-		this.statusEl = contentEl.createDiv({cls: "canvas-acp-status"});
-
-		debugLog("modal", "render actions");
 		const actions = contentEl.createDiv({cls: "canvas-acp-actions"});
 		const askButton = new ButtonComponent(actions)
 			.setButtonText("Ask")
@@ -250,15 +254,25 @@ function createThrottledCanvasUpdate(app: App, target: CanvasTextNodeTarget): {
 }
 
 function buildPrompt(selection: SelectedCanvasSource, question: string): string {
-	return [
+	const parts = [
 		"You are helping expand an Obsidian canvas graph.",
 		"Answer the user's question using the provided canvas node as context.",
-		"Create a concise but useful Markdown note body.",
-		"Do not include YAML frontmatter, file names, or code fences around the full answer.",
-		"",
-		`Source: ${selection.sourceFile?.path ?? selection.sourceTitle ?? selection.sourceUri ?? "Canvas node"}`,
-		`Question: ${question}`,
-	].join("\n");
+	];
+
+	if (selection.upstreamContext) {
+		parts.push("");
+		parts.push("The following upstream nodes also connect to the source node and may provide additional context:");
+		parts.push(selection.upstreamContext);
+	}
+
+	parts.push("");
+	parts.push("Create a concise but useful Markdown note body.");
+	parts.push("Do not include YAML frontmatter, file names, or code fences around the full answer.");
+	parts.push("");
+	parts.push(`Source: ${selection.sourceFile?.path ?? selection.sourceTitle ?? selection.sourceUri ?? "Canvas node"}`);
+	parts.push(`Question: ${question}`);
+
+	return parts.join("\n");
 }
 
 function getSourceUri(selection: SelectedCanvasSource, basePath: string): string {
@@ -286,6 +300,7 @@ function getVaultBasePath(app: App): string {
 
 function summarizeSelection(selection: SelectedCanvasSource) {
 	const sourceText = selection.sourceText ?? "";
+	const upstreamContext = selection.upstreamContext ?? "";
 	return {
 		canvasPath: selection.canvasPath,
 		sourceFilePath: selection.sourceFile?.path,
@@ -294,6 +309,8 @@ function summarizeSelection(selection: SelectedCanvasSource) {
 		sourceNodeId: selection.sourceNodeId,
 		sourceTextLength: sourceText.length,
 		sourceTextPreview: sourceText.slice(0, 160),
+		upstreamContextLength: upstreamContext.length,
+		upstreamContextPreview: upstreamContext.slice(0, 160),
 		viewFilePath: selection.view?.file?.path,
 		viewType: selection.view?.getViewType?.(),
 	};

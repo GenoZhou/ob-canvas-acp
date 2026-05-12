@@ -55,6 +55,7 @@ export interface SelectedCanvasSource {
 	sourceUri: string;
 	sourceNodeId: string;
 	view: CanvasViewLike;
+	upstreamContext?: string;
 }
 
 export interface CanvasTextNodeTarget {
@@ -113,6 +114,12 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 		throw new Error("The selected canvas node could not be read.");
 	}
 
+	const upstreamContext = await getUpstreamContext(app, data, selectedNode);
+	debugLog("selection", "upstream context resolved", {
+		upstreamNodeCount: data.edges.filter((edge) => edge.toNode === selectedNode.id).length,
+		upstreamContextLength: upstreamContext.length,
+	});
+
 	if (selectedNode.type === "file") {
 		if (!selectedNode.file) {
 			throw new Error("The selected note node does not point to a note.");
@@ -131,6 +138,7 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 			sourceUri: `vault://${sourceFile.path}`,
 			sourceNodeId: selectedNode.id,
 			view,
+			upstreamContext,
 		};
 	}
 
@@ -142,6 +150,7 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 		sourceUri: `canvas://${canvasFile.path}#${selectedNode.id}`,
 		sourceNodeId: selectedNode.id,
 		view,
+		upstreamContext,
 	};
 }
 
@@ -151,6 +160,32 @@ function isSupportedSourceNode(node: CanvasNodeData): boolean {
 
 function firstTextLine(text: string | undefined): string {
 	return text?.split("\n").map((line) => line.trim()).find(Boolean)?.slice(0, 60) ?? "";
+}
+
+async function getUpstreamContext(app: App, data: CanvasData, selectedNode: CanvasNodeData): Promise<string> {
+	const upstreamEdges = data.edges.filter((edge) => edge.toNode === selectedNode.id);
+	const upstreamNodes = upstreamEdges
+		.map((edge) => data.nodes.find((node) => node.id === edge.fromNode))
+		.filter((node): node is CanvasNodeData => Boolean(node));
+
+	if (upstreamNodes.length === 0) {
+		return "";
+	}
+
+	const parts: string[] = [];
+	for (const node of upstreamNodes) {
+		if (node.type === "file" && node.file) {
+			const file = app.vault.getAbstractFileByPath(node.file);
+			if (file instanceof TFile) {
+				const content = await app.vault.read(file);
+				parts.push(`Note [[${file.basename}]]:\n${content}`);
+			}
+		} else if (node.type === "text") {
+			parts.push(`Text node:\n${node.text ?? ""}`);
+		}
+	}
+
+	return parts.join("\n\n");
 }
 
 function getCanvasSelection(view: CanvasViewLike, app: App): {selectedIds: Set<string>; selectedFiles: Set<string>} {
