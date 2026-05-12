@@ -270,6 +270,9 @@ export async function addStreamingTextNodeToCanvas(
 	settings: CanvasAcpSettings,
 	initialText: string,
 ): Promise<CanvasTextNodeTarget> {
+	if (!selection.view) {
+		throw new Error("Canvas view is no longer available. Please reopen the canvas and try again.");
+	}
 	const canvasPath = resolveCanvasPath(app, selection.canvasPath, selection.view);
 	debugLog("canvas-write", "add streaming text node start", {
 		canvasPath,
@@ -323,6 +326,9 @@ export async function addStreamingTextNodeToCanvas(
 }
 
 export async function updateCanvasTextNode(app: App, target: CanvasTextNodeTarget, text: string): Promise<void> {
+	if (!target.view) {
+		throw new Error("Canvas view is no longer available. Please reopen the canvas and try again.");
+	}
 	const canvasPath = resolveCanvasPath(app, target.canvasPath, target.view);
 	debugLog("canvas-write", "update text node start", {
 		canvasPath,
@@ -342,11 +348,11 @@ export async function updateCanvasTextNode(app: App, target: CanvasTextNodeTarge
 	await writeCanvasData(app, canvasFile, data, target.view);
 }
 
-function resolveCanvasPath(app: App, preferredPath: string | undefined, view: CanvasViewLike): string {
-	const path = preferredPath ?? view.file?.path ?? getActiveCanvasView(app).file?.path;
+function resolveCanvasPath(app: App, preferredPath: string | undefined, view: CanvasViewLike | undefined): string {
+	const path = preferredPath ?? view?.file?.path ?? getActiveCanvasView(app).file?.path;
 	debugLog("canvas", "resolve canvas path", {
 		preferredPath,
-		viewFilePath: view.file?.path,
+		viewFilePath: view?.file?.path,
 		resolvedPath: path,
 	});
 	if (!path) {

@@ -52,6 +52,12 @@ class AskQuestionModal extends Modal {
 			return;
 		}
 
+		if (!this.canvasSource?.view) {
+			new Notice("Canvas source is no longer available. Please reopen the canvas and try again.");
+			this.close();
+			return;
+		}
+
 		this.isRunning = true;
 		this.updateSubmitState();
 		const question = this.question;
@@ -66,6 +72,9 @@ class AskQuestionModal extends Modal {
 
 	private async createResponseNodeAndStream(question: string) {
 		try {
+			if (!this.canvasSource?.view) {
+				throw new Error("Canvas source is no longer available. Please reopen the canvas and try again.");
+			}
 			debugLog("workflow", "create response node start", {
 				questionLength: question.length,
 				selection: summarizeSelection(this.canvasSource),
@@ -90,6 +99,9 @@ class AskQuestionModal extends Modal {
 		const canvasUpdate = createThrottledCanvasUpdate(this.app, target);
 
 		try {
+			if (!this.canvasSource?.view) {
+				throw new Error("Canvas source is no longer available. Please reopen the canvas and try again.");
+			}
 			debugLog("workflow", "stream response start", {
 				target,
 				questionLength: question.length,
