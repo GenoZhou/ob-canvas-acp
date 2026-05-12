@@ -56,6 +56,7 @@ export interface SelectedCanvasSource {
 	sourceNodeId: string;
 	view: CanvasViewLike;
 	upstreamContext?: string;
+	upstreamNodeCount: number;
 }
 
 export interface CanvasTextNodeTarget {
@@ -115,8 +116,9 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 	}
 
 	const upstreamContext = await getUpstreamContext(app, data, selectedNode);
+	const upstreamNodeCount = data.edges.filter((edge) => edge.toNode === selectedNode.id).length;
 	debugLog("selection", "upstream context resolved", {
-		upstreamNodeCount: data.edges.filter((edge) => edge.toNode === selectedNode.id).length,
+		upstreamNodeCount,
 		upstreamContextLength: upstreamContext.length,
 	});
 
@@ -139,6 +141,7 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 			sourceNodeId: selectedNode.id,
 			view,
 			upstreamContext,
+			upstreamNodeCount,
 		};
 	}
 
@@ -151,6 +154,7 @@ export async function getSelectedCanvasSource(app: App): Promise<SelectedCanvasS
 		sourceNodeId: selectedNode.id,
 		view,
 		upstreamContext,
+		upstreamNodeCount,
 	};
 }
 
@@ -274,12 +278,13 @@ export async function addStreamingTextNodeToCanvas(
 		throw new Error("The selected canvas node could not be found.");
 	}
 
+	const {x: targetX, y: targetY} = findNonOverlappingPosition(data, sourceNode, settings.nodeWidth, settings.nodeHeight);
 	const targetNode: CanvasNodeData = {
 		id: createCanvasId(),
 		type: "text",
 		text: initialText,
-		x: sourceNode.x + sourceNode.width + 180,
-		y: sourceNode.y,
+		x: targetX,
+		y: targetY,
 		width: settings.nodeWidth,
 		height: settings.nodeHeight,
 	};
@@ -402,6 +407,27 @@ function refreshCanvasView(view: CanvasViewLike, data: CanvasData) {
 	} catch (error) {
 		debugWarn("canvas-refresh", "could not refresh active canvas view", error);
 	}
+}
+
+function findNonOverlappingPosition(data: CanvasData, sourceNode: CanvasNodeData, nodeWidth: number, nodeHeight: number): {x: number; y: number} {
+	const targetX = sourceNode.x + sourceNode.width + 180;
+	const gap = 40;
+
+	const overlappingNodes = data.nodes.filter((node) => {
+		return node.x < targetX + nodeWidth && node.x + (node.width ?? nodeWidth) > targetX;
+	});
+
+	overlappingNodes.sort((a, b) => a.y - b.y);
+
+	let targetY = sourceNode.y;
+	for (const node of overlappingNodes) {
+		const nodeBottom = node.y + (node.height ?? nodeHeight);
+		if (node.y <= targetY && nodeBottom > targetY) {
+			targetY = nodeBottom + gap;
+		}
+	}
+
+	return {x: targetX, y: targetY};
 }
 
 function createCanvasId(): string {

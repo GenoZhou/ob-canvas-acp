@@ -68,6 +68,7 @@ function summarizeSettings(settings: CanvasAcpSettings) {
 		agentArgsLength: agentArgs.length,
 		nodeWidth: settings.nodeWidth,
 		nodeHeight: settings.nodeHeight,
+		includeThinking: settings.includeThinking,
 		debugLogging: settings.debugLogging,
 	};
 }

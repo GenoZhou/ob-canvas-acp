@@ -107,7 +107,7 @@ class AskQuestionModal extends Modal {
 				questionLength: question.length,
 				selection: summarizeSelection(this.canvasSource),
 			});
-			const prompt = buildPrompt(this.canvasSource, question);
+			const prompt = buildPrompt(this.canvasSource, question, this.settings.includeThinking);
 			const basePath = getVaultBasePath(this.app);
 			debugLog("workflow", "vault base path resolved", {
 				basePath,
@@ -136,7 +136,11 @@ class AskQuestionModal extends Modal {
 				stopReason: result.stopReason,
 			});
 			await canvasUpdate.flush();
-			await updateCanvasTextNode(this.app, target, lastText.trim() || "No response was returned by the ACP agent.");
+			let finalText = lastText.trim() || "No response was returned by the ACP agent.";
+			if (!this.settings.includeThinking) {
+				finalText = finalText.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+			}
+			await updateCanvasTextNode(this.app, target, finalText);
 		} catch (error) {
 			debugError("workflow", "stream response failed", error);
 			await canvasUpdate.flush();
@@ -163,13 +167,36 @@ class AskQuestionModal extends Modal {
 		contentEl.empty();
 		contentEl.addClass("canvas-acp-modal");
 
+		debugLog("modal", "render stats");
+		const stats = contentEl.createDiv({cls: "canvas-acp-stats"});
+		const upstreamCount = this.canvasSource.upstreamNodeCount ?? 0;
+		const sourceLen = this.canvasSource.sourceText?.length ?? 0;
+		const upstreamLen = this.canvasSource.upstreamContext?.length ?? 0;
+		stats.setText(`${upstreamCount} upstream nodes | ${sourceLen + upstreamLen} chars`);
+
 		debugLog("modal", "render input");
 		const input = document.createElement("input");
 		input.type = "text";
 		input.placeholder = "Ask a question...";
+
+		const previewDetails = contentEl.createEl("details", {cls: "canvas-acp-preview"});
+		previewDetails.createEl("summary", {text: "Preview prompt"});
+		const previewPre = previewDetails.createEl("pre");
+		previewDetails.style.display = "none";
+
+		const updatePreview = () => {
+			if (this.question) {
+				previewPre.setText(buildPrompt(this.canvasSource, this.question, this.settings.includeThinking));
+				previewDetails.style.display = "";
+			} else {
+				previewDetails.style.display = "none";
+			}
+		};
+
 		input.addEventListener("input", () => {
 			this.question = input.value.trim();
 			this.updateSubmitState();
+			updatePreview();
 		});
 		input.addEventListener("keydown", (event) => {
 			if (event.key === "Enter") {
@@ -182,6 +209,7 @@ class AskQuestionModal extends Modal {
 			}
 		});
 		contentEl.appendChild(input);
+		contentEl.appendChild(previewDetails);
 
 		const actions = contentEl.createDiv({cls: "canvas-acp-actions"});
 		const askButton = new ButtonComponent(actions)
@@ -249,7 +277,7 @@ function createThrottledCanvasUpdate(app: App, target: CanvasTextNodeTarget): {
 	};
 }
 
-function buildPrompt(selection: SelectedCanvasSource, question: string): string {
+function buildPrompt(selection: SelectedCanvasSource, question: string, includeThinking: boolean): string {
 	const parts = [
 		"You are helping expand an Obsidian canvas graph.",
 		"Answer the user's question using the provided canvas node as context.",
@@ -259,6 +287,11 @@ function buildPrompt(selection: SelectedCanvasSource, question: string): string 
 		parts.push("");
 		parts.push("The following upstream nodes also connect to the source node and may provide additional context:");
 		parts.push(selection.upstreamContext);
+	}
+
+	if (includeThinking) {
+		parts.push("");
+		parts.push("Please show your reasoning process before giving the final answer.");
 	}
 
 	parts.push("");
@@ -305,6 +338,7 @@ function summarizeSelection(selection: SelectedCanvasSource) {
 		sourceNodeId: selection.sourceNodeId,
 		sourceTextLength: sourceText.length,
 		sourceTextPreview: sourceText.slice(0, 160),
+		upstreamNodeCount: selection.upstreamNodeCount,
 		upstreamContextLength: upstreamContext.length,
 		upstreamContextPreview: upstreamContext.slice(0, 160),
 		viewFilePath: selection.view?.file?.path,
