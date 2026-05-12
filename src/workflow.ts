@@ -26,14 +26,14 @@ class AskQuestionModal extends Modal {
 	constructor(
 		app: App,
 		private readonly settings: CanvasAcpSettings,
-		private readonly selection: SelectedCanvasSource,
+		private readonly canvasSource: SelectedCanvasSource,
 	) {
 		super(app);
 	}
 
 	onOpen() {
 		try {
-			debugLog("modal", "open start", summarizeSelection(this.selection));
+			debugLog("modal", "open start", summarizeSelection(this.canvasSource));
 			this.renderModal();
 			debugLog("modal", "open complete");
 		} catch (error) {
@@ -58,7 +58,7 @@ class AskQuestionModal extends Modal {
 		debugLog("modal", "submit", {
 			questionLength: question.length,
 			questionPreview: question.slice(0, 160),
-			selection: summarizeSelection(this.selection),
+			selection: summarizeSelection(this.canvasSource),
 		});
 		this.close();
 		void this.createResponseNodeAndStream(question);
@@ -68,11 +68,11 @@ class AskQuestionModal extends Modal {
 		try {
 			debugLog("workflow", "create response node start", {
 				questionLength: question.length,
-				selection: summarizeSelection(this.selection),
+				selection: summarizeSelection(this.canvasSource),
 			});
 			const target = await addStreamingTextNodeToCanvas(
 				this.app,
-				this.selection,
+				this.canvasSource,
 				question,
 				this.settings,
 				"Thinking...",
@@ -93,9 +93,9 @@ class AskQuestionModal extends Modal {
 			debugLog("workflow", "stream response start", {
 				target,
 				questionLength: question.length,
-				selection: summarizeSelection(this.selection),
+				selection: summarizeSelection(this.canvasSource),
 			});
-			const prompt = buildPrompt(this.selection, question);
+			const prompt = buildPrompt(this.canvasSource, question);
 			const basePath = getVaultBasePath(this.app);
 			debugLog("workflow", "vault base path resolved", {
 				basePath,
@@ -106,9 +106,9 @@ class AskQuestionModal extends Modal {
 			const client = new AcpClient(this.settings.agentCommand, splitArgs(this.settings.agentArgs), basePath);
 
 			const result = await client.runPrompt(prompt, [{
-				uri: getSourceUri(this.selection, basePath),
+				uri: getSourceUri(this.canvasSource, basePath),
 				mimeType: "text/markdown",
-				text: this.selection.sourceText ?? "",
+				text: this.canvasSource.sourceText ?? "",
 			}], (_chunk, fullText) => {
 				lastText = fullText.trimStart();
 				debugLog("workflow", "ACP chunk received", {
@@ -153,7 +153,7 @@ class AskQuestionModal extends Modal {
 
 		debugLog("modal", "render heading");
 		appendTextElement(contentEl, "h2", "Ask about this canvas node");
-		appendTextElement(contentEl, "p", getSelectionLabel(this.selection), "canvas-acp-source");
+		appendTextElement(contentEl, "p", getSelectionLabel(this.canvasSource), "canvas-acp-source");
 
 		debugLog("modal", "render question field");
 		const field = contentEl.createDiv({cls: "canvas-acp-field"});
