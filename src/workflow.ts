@@ -66,7 +66,7 @@ class AskQuestionModal extends Modal {
 		this.isRunning = true;
 		this.updateSubmitState();
 		const question = this.question;
-		const promptTextarea = this.contentEl.querySelector(".canvas-acp-prompt") as HTMLTextAreaElement | null;
+		const promptTextarea = this.contentEl.querySelector<HTMLTextAreaElement>(".canvas-acp-prompt");
 		const rawPreview = promptTextarea?.value ?? "";
 		const divider = CONTEXT_DIVIDER;
 		const dividerIndex = rawPreview.indexOf(divider);

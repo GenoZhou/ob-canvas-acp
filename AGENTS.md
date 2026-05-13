@@ -102,27 +102,43 @@ npm run build
 
 ### Release workflow (automated)
 
-This repo includes `scripts/release.mjs` to automate the Obsidian release checklist.
+This repo follows the shared `release-flow` pattern. Local scripts update version files, commit, tag, and push; GitHub Actions creates the GitHub Release from the pushed tag.
 
 ```bash
-# Full publish: bump, commit, tag, push, and create GitHub Release
-npm run release
+# Cheap local verification during normal development
+npm run verify
 
-# Prepare only: bump, commit, and tag locally (no push / no release)
+# Full release gate used by publish scripts
+npm run prepublish
+
+# Prepare only: update version files and run prepublish (no commit / no tag / no push)
+npm run prerelease
 npm run release:prepare
+
+# Publish: commit, tag, push, and verify
+npm run release:prerelease
+npm run release:stable
+
+# Post-publish verification for a specific tag
+npm run verify:release -- 1.2.3
 ```
 
-Both commands will:
-1. Verify you are on `main` with a clean working tree.
-2. Verify local `main` is in sync with `origin/main`.
-3. Run `npm run build` and abort on failure.
-4. Ask for the target version (defaults to stripping the prerelease suffix, e.g. `1.0.1-beta.20` → `1.0.1`).
-5. Bump `package.json`, `manifest.json`, and `versions.json`.
-6. Commit the version bump and create a **tag without a `v` prefix**.
+There is intentionally no `npm run release` alias. npm treats `prerelease` as a lifecycle hook for a `release` script, which can accidentally prepare a prerelease before a stable publish.
 
-In `--publish` mode it also:
-7. Pushes `main` and the tag to `origin`.
-8. Creates a GitHub Release on the `origin` repo using `gh` CLI, attaching `main.js`, `manifest.json`, and `styles.css`.
+Prepare commands will:
+1. Verify you are on `main` with a clean working tree.
+2. Choose the next version unless `--version` is provided.
+3. Check local and remote tag availability.
+4. Update `package.json`, `package-lock.json`, `manifest.json`, and `versions.json`.
+5. Run `npm run prepublish`.
+
+Publish commands additionally:
+6. Enforce the repo-local release author: `Geno <6045730+GenoZhou@users.noreply.github.com>`.
+7. Commit the version bump and create a **tag without a `v` prefix**.
+8. Push `main` and the tag to `origin`.
+9. Run `npm run verify:release -- <version>` to check the local tag, remote tag, pushed branch, GitHub Release, or in-progress release workflow.
+
+The tag-triggered workflow at `.github/workflows/release.yml` creates the GitHub Release and attaches `main.js`, `manifest.json`, and `styles.css`. Prerelease tags such as `1.2.3-beta.4` are marked as GitHub prereleases.
 
 ### Hard-won lessons (do not repeat manually)
 
@@ -132,14 +148,17 @@ In `--publish` mode it also:
 2. **Stage `package-lock.json` explicitly.**  
    `npm version` mutates `package-lock.json`, but the `version` npm script only staged `manifest.json` and `versions.json`. This left `package-lock.json` unstaged and easy to miss in the release commit. The release script stages all four files together.
 
-3. **Specify the correct repo for `gh release create`.**  
-   If your fork retains the `upstream` remote (`obsidianmd/obsidian-sample-plugin`), the `gh` CLI defaults to that upstream instead of `origin`. The release script detects `origin` and passes `--repo <owner/repo>` explicitly.
+3. **Let GitHub Actions create the GitHub Release.**
+   The local publish scripts push the tag and then verify release creation or workflow progress. Do not also run a separate local `gh release create` unless recovering manually from a failed workflow.
 
 4. **Always build before releasing.**  
-   `main.js` is a build artifact and must be up-to-date before it is attached to the GitHub Release. The script runs `npm run build` as a gate before any version bumps.
+   `main.js` is a build artifact and must be up-to-date before it is attached to the GitHub Release. `npm run prepublish` runs build, tests, lint, and dist validation.
 
 5. **Do not commit build artifacts (`main.js`) to git.**  
    `main.js` is generated and should remain gitignored. It is only uploaded as a release asset.
+
+6. **Use the single verification command after publish.**
+   `npm run verify:release -- <version>` checks local and remote tag state, branch push state, and the GitHub Release or release workflow. Avoid rerunning the full build/test suite after a publish command that already ran `prepublish`.
 
 ## Security, privacy, and compliance
 

@@ -23,7 +23,8 @@ const RELEASE_AUTHOR = {
 };
 
 const explicitVersion = readArg("--version");
-const bumpType = readArg("--bump");
+const explicitBase = readArg("--base");
+const preid = readArg("--preid") || "beta";
 const shouldPublish = hasFlag("--publish");
 const remoteName = readArg("--remote") || "origin";
 
@@ -32,8 +33,8 @@ if (hasFlag("--help")) {
 	process.exit(0);
 }
 
-if (bumpType && !["major", "minor", "patch"].includes(bumpType)) {
-	fail(`Invalid --bump "${bumpType}". Expected major, minor, or patch.`);
+if (explicitBase && !["major", "minor", "patch"].includes(explicitBase)) {
+	fail(`Invalid --base "${explicitBase}". Expected major, minor, or patch.`);
 }
 
 main();
@@ -48,23 +49,24 @@ function main() {
 		fail(`Version mismatch: manifest.json (${manifest.version}) vs package.json (${packageJson.version})`);
 	}
 
-	const nextVersion = explicitVersion || getNextStableVersion(packageJson.version, bumpType);
-	validateStableVersion(nextVersion);
+	const nextVersion = explicitVersion || getNextPrereleaseVersion(packageJson.version, preid, explicitBase);
+	validatePrereleaseVersion(nextVersion);
 	ensureVersionAvailable(nextVersion);
 
 	updateVersions(nextVersion);
 	run("npm", ["run", "prepublish"]);
 
-	console.log(`\nPrepared stable release ${nextVersion}.`);
+	console.log(`\nPrepared prerelease ${nextVersion}.`);
 	if (shouldPublish) publish(nextVersion);
 }
 
 function usage() {
-	console.log(`Usage: node scripts/release.mjs [options]
+	console.log(`Usage: node scripts/prerelease.mjs [options]
 
 Options:
-  --version <version>   Use an explicit stable version, e.g. 1.2.7
-  --bump <type>         Bump from current stable version: major, minor, patch
+  --version <version>   Use an explicit prerelease version, e.g. 1.2.3-beta.2
+  --base <type>         Base bump when starting a new prerelease: major, minor, patch
+  --preid <id>          Prerelease identifier, default: beta
   --publish             Commit, tag, push, and verify
   --remote <name>       Git remote to inspect and push, default: origin
   --help                Show this help
@@ -79,7 +81,7 @@ function publish(version) {
 	if (staged) run("git", ["commit", "-m", `Release ${version}`]);
 	ensureVersionAvailable(version);
 
-	console.log(`\nPublishing stable release ${version}`);
+	console.log(`\nPublishing prerelease ${version}`);
 	console.log(`Remote: ${remoteName}`);
 	console.log(`Branch: ${branch}`);
 	run("git", ["tag", version]);
@@ -107,11 +109,24 @@ function ensureReleaseAuthor() {
 	}
 }
 
-function getNextStableVersion(version, type) {
+function getNextPrereleaseVersion(version, id, baseType) {
 	const parsed = parseVersion(version);
-	if (!type && parsed.prerelease) return `${parsed.major}.${parsed.minor}.${parsed.patch}`;
-	const bumped = bumpBase(parsed, type || "patch");
-	return `${bumped.major}.${bumped.minor}.${bumped.patch}`;
+	const base = !baseType && parsed.prerelease ? parsed : bumpBase(parsed, baseType || "patch");
+	const pattern = `${base.major}.${base.minor}.${base.patch}-${id}.*`;
+	const localMax = getMaxPrereleaseTagNumber(commandOutput("git", ["tag", "--list", pattern]), base, id);
+	const remoteMax = getMaxPrereleaseTagNumber(remoteTagOutput(pattern), base, id);
+	return `${base.major}.${base.minor}.${base.patch}-${id}.${Math.max(localMax, remoteMax) + 1}`;
+}
+
+function getMaxPrereleaseTagNumber(tagOutput, base, id) {
+	if (!tagOutput) return 0;
+	const tagPattern = new RegExp(`(?:refs/tags/)?${base.major}\\.${base.minor}\\.${base.patch}-${escapeRegExp(id)}\\.(\\d+)$`);
+	return tagOutput
+		.split(/\r?\n/)
+		.map((line) => line.trim().match(tagPattern)?.[1])
+		.filter(Boolean)
+		.map(Number)
+		.reduce((max, value) => Math.max(max, value), 0);
 }
 
 function updateVersions(version) {
@@ -143,10 +158,11 @@ function updateVersions(version) {
 
 function updateReadmeBadge(filePath, version) {
 	if (!fs.existsSync(filePath)) return;
+	const badgeVersion = version.replace(/-/g, "--");
 	const content = fs.readFileSync(filePath, "utf-8");
 	const next = content.replace(
 		/!\[Version\]\(https:\/\/img\.shields\.io\/badge\/version-[^)]+-blue\)/,
-		`![Version](https://img.shields.io/badge/version-${version}-blue)`,
+		`![Version](https://img.shields.io/badge/version-${badgeVersion}-blue)`,
 	);
 	fs.writeFileSync(filePath, next);
 }
@@ -173,8 +189,8 @@ function bumpBase(version, type) {
 	return { major: version.major, minor: version.minor, patch: version.patch + 1 };
 }
 
-function validateStableVersion(version) {
-	if (parseVersion(version).prerelease) fail(`"${version}" is not a stable version. Use scripts/prerelease.mjs for prereleases.`);
+function validatePrereleaseVersion(version) {
+	if (!parseVersion(version).prerelease) fail(`"${version}" is not a prerelease version.`);
 }
 
 function ensureVersionAvailable(version) {
@@ -221,6 +237,10 @@ function run(command, commandArgs) {
 	console.log(`\n$ ${[command, ...commandArgs].join(" ")}`);
 	const result = spawnSync(command, commandArgs, { cwd: rootDir, stdio: "inherit" });
 	if (result.status !== 0) process.exit(result.status ?? 1);
+}
+
+function escapeRegExp(value) {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function fail(message) {

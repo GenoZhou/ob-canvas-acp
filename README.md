@@ -56,7 +56,11 @@ The plugin sends only the selected node content, upstream context, and your ques
 
 ## Release
 
-- Update `manifest.json` and `versions.json` with the new version.
-- Run `npm version patch`, `npm version minor`, or `npm version prerelease --preid=beta` to keep version files in sync.
-- Build with `npm run build`.
-- Attach `manifest.json`, `main.js`, and `styles.css` to the GitHub release.
+- Run `npm run verify` for a local test/lint pass during development.
+- Run `npm run prepublish` before manual release checks; it builds, tests, lints, and validates release artifacts.
+- Prepare the next prerelease with `npm run prerelease`. Publish it with `npm run release:prerelease`.
+- Prepare the next stable release with `npm run release:prepare`. Publish it with `npm run release:stable`.
+- There is intentionally no `npm run release` alias, because npm would run the `prerelease` lifecycle hook before it.
+- Release scripts update `package.json`, `package-lock.json`, `manifest.json`, and `versions.json`.
+- Publish scripts commit the version bump, create a semver tag without a `v` prefix, push `main` plus the tag, and run `npm run verify:release -- <version>`.
+- GitHub Actions creates the GitHub Release from the pushed tag and attaches `manifest.json`, `main.js`, and `styles.css`.

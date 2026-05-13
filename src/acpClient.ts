@@ -223,7 +223,7 @@ export class AcpClient {
 			if (line) {
 				try {
 					this.handleMessage(JSON.parse(line) as JsonRpcResponse | JsonRpcNotification);
-				} catch (parseError) {
+				} catch {
 					debugWarn("acp-rpc", "discarding non-JSON line from agent", line);
 				}
 			}
