@@ -49,6 +49,11 @@ The plugin sends only the selected node content, upstream context, and your ques
 - Run `npm test` to execute the test suite.
 - Copy `main.js`, `styles.css`, and `manifest.json` into `VaultFolder/.obsidian/plugins/ob-canvas-acp/` for manual testing.
 
+## Acknowledgments
+
+- This plugin was bootstrapped from the [Obsidian Sample Plugin](https://github.com/obsidianmd/obsidian-sample-plugin) template. Its build tooling and plugin skeleton provided the starting point.
+- The idea of bringing an [Agent Client Protocol (ACP)](https://github.com/agentclientprotocol/agent-client-protocol) agent into Obsidian was inspired by [obsidian-agent-client](https://github.com/RAIT-09/obsidian-agent-client) by RAIT-09. While the codebases are independent (this project implements ACP communication with a lightweight custom client rather than the official SDK), the conceptual proof that ACP agents can work inside Obsidian was valuable.
+
 ## Release
 
 - Update `manifest.json` and `versions.json` with the new version.
