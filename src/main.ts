@@ -63,12 +63,10 @@ function handleCommandError(source: string) {
 function summarizeSettings(settings: CanvasAcpSettings) {
 	const agentCommand = settings.agentCommand ?? "";
 	const agentArgs = settings.agentArgs ?? "";
-	const systemPrompt = settings.systemPrompt ?? "";
 	return {
 		hasAgentCommand: agentCommand.length > 0,
 		agentCommand,
 		agentArgsLength: agentArgs.length,
-		systemPromptLength: systemPrompt.length,
 		nodeWidth: settings.nodeWidth,
 		nodeHeight: settings.nodeHeight,
 		debugLogging: settings.debugLogging,

@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {buildPrompt, DEFAULT_SYSTEM_PROMPT, getSourceUri, summarizeSelection} from "../workflow";
+import {buildPrompt, getSourceUri, summarizeSelection} from "../workflow";
 import type {SelectedCanvasSource} from "../canvas";
 
 function mockSelection(overrides: Partial<SelectedCanvasSource> = {}): SelectedCanvasSource {
@@ -22,22 +22,6 @@ describe("buildPrompt", () => {
 		const prompt = buildPrompt(mockSelection(), "What is this?", false);
 		expect(prompt).toContain("What is this?");
 		expect(prompt).toContain("Canvas node");
-	});
-
-	it("uses the default system prompt when none is configured", () => {
-		const prompt = buildPrompt(mockSelection(), "What is this?", false);
-		expect(prompt.startsWith(DEFAULT_SYSTEM_PROMPT)).toBe(true);
-	});
-
-	it("replaces the default system prompt when configured", () => {
-		const prompt = buildPrompt(mockSelection(), "What is this?", false, "Use a custom voice.");
-		expect(prompt.startsWith("Use a custom voice.")).toBe(true);
-		expect(prompt).not.toContain("You are helping expand an Obsidian canvas graph.");
-	});
-
-	it("falls back to the default system prompt for whitespace-only configuration", () => {
-		const prompt = buildPrompt(mockSelection(), "What is this?", false, "   \n\t");
-		expect(prompt.startsWith(DEFAULT_SYSTEM_PROMPT)).toBe(true);
 	});
 
 	it("includes upstream context when present", () => {

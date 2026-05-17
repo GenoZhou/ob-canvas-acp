@@ -4,7 +4,6 @@ import CanvasAcpPlugin from "./main";
 export interface CanvasAcpSettings {
 	agentCommand: string;
 	agentArgs: string;
-	systemPrompt: string;
 	nodeWidth: number;
 	nodeHeight: number;
 	debugLogging: boolean;
@@ -13,7 +12,6 @@ export interface CanvasAcpSettings {
 export const DEFAULT_SETTINGS: CanvasAcpSettings = {
 	agentCommand: "",
 	agentArgs: "",
-	systemPrompt: "",
 	nodeWidth: 420,
 	nodeHeight: 260,
 	debugLogging: true,
@@ -53,17 +51,6 @@ export class CanvasAcpSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.agentArgs)
 				.onChange(async (value) => {
 					this.plugin.settings.agentArgs = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName("System prompt")
-			.setDesc("Replaces the default base instructions. Leave blank to use the default prompt.")
-			.addTextArea((text) => text
-				.setPlaceholder("You are helping expand an Obsidian canvas graph.")
-				.setValue(this.plugin.settings.systemPrompt)
-				.onChange(async (value) => {
-					this.plugin.settings.systemPrompt = value;
 					await this.plugin.saveSettings();
 				}));
 
