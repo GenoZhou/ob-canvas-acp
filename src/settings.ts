@@ -7,6 +7,7 @@ export interface CanvasAcpSettings {
 	nodeWidth: number;
 	nodeHeight: number;
 	debugLogging: boolean;
+	systemPrompt: string;
 }
 
 export const DEFAULT_SETTINGS: CanvasAcpSettings = {
@@ -15,6 +16,7 @@ export const DEFAULT_SETTINGS: CanvasAcpSettings = {
 	nodeWidth: 420,
 	nodeHeight: 260,
 	debugLogging: true,
+	systemPrompt: "",
 };
 
 export class CanvasAcpSettingTab extends PluginSettingTab {
@@ -69,6 +71,17 @@ export class CanvasAcpSettingTab extends PluginSettingTab {
 				.setValue(String(this.plugin.settings.nodeHeight))
 				.onChange(async (value) => {
 					this.plugin.settings.nodeHeight = parseNodeSize(value, 120, DEFAULT_SETTINGS.nodeHeight);
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName("System prompt")
+			.setDesc("Replaces the default base prompt when non-empty. Blank or whitespace-only values fall back to the default behavior.")
+			.addTextArea((text) => text
+				.setPlaceholder("Enter a custom system prompt...")
+				.setValue(this.plugin.settings.systemPrompt)
+				.onChange(async (value) => {
+					this.plugin.settings.systemPrompt = value;
 					await this.plugin.saveSettings();
 				}));
 

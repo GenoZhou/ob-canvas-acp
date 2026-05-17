@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {buildPrompt, getSourceUri, summarizeSelection} from "../workflow";
+import {buildPrompt, DEFAULT_SYSTEM_PROMPT, getSourceUri, summarizeSelection} from "../workflow";
 import type {SelectedCanvasSource} from "../canvas";
 
 function mockSelection(overrides: Partial<SelectedCanvasSource> = {}): SelectedCanvasSource {
@@ -45,6 +45,39 @@ describe("buildPrompt", () => {
 		});
 		const prompt = buildPrompt(selection, "Q", false);
 		expect(prompt).toContain("notes/hello.md");
+	});
+
+	it("uses default system prompt when no custom prompt is provided", () => {
+		const prompt = buildPrompt(mockSelection(), "What is this?", false);
+		expect(prompt.startsWith(DEFAULT_SYSTEM_PROMPT)).toBe(true);
+	});
+
+	it("uses custom system prompt when provided", () => {
+		const custom = "You are a custom assistant.";
+		const prompt = buildPrompt(mockSelection(), "What is this?", false, custom);
+		expect(prompt.startsWith(custom)).toBe(true);
+		expect(prompt).not.toContain("You are helping expand an Obsidian canvas graph.");
+	});
+
+	it("falls back to default system prompt for whitespace-only custom prompt", () => {
+		const prompt = buildPrompt(mockSelection(), "What is this?", false, "   \n\t  ");
+		expect(prompt.startsWith(DEFAULT_SYSTEM_PROMPT)).toBe(true);
+	});
+
+	it("preserves upstream context, thinking, and constraints with custom system prompt", () => {
+		const custom = "Custom assistant.";
+		const prompt = buildPrompt(
+			mockSelection({upstreamContext: "Upstream info", upstreamNodeCount: 1}),
+			"Explain?",
+			true,
+			custom,
+		);
+		expect(prompt.startsWith(custom)).toBe(true);
+		expect(prompt).toContain("Upstream info");
+		expect(prompt).toContain("reasoning process");
+		expect(prompt).toContain("Create a concise but useful Markdown note body.");
+		expect(prompt).toContain("Source:");
+		expect(prompt).toContain("Question: Explain?");
 	});
 });
 

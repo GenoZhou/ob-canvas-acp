@@ -70,5 +70,6 @@ function summarizeSettings(settings: CanvasAcpSettings) {
 		nodeWidth: settings.nodeWidth,
 		nodeHeight: settings.nodeHeight,
 		debugLogging: settings.debugLogging,
+		systemPromptLength: settings.systemPrompt?.length ?? 0,
 	};
 }

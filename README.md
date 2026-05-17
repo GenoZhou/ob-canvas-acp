@@ -29,6 +29,7 @@ Configure in **Settings → Canvas ACP**:
 - **Agent command**: executable path, such as `node` or an absolute path to an ACP agent.
 - **Agent arguments**: arguments passed to the command, such as the path to an ACP adapter.
 - **Generated node size**: width and height for new canvas text nodes.
+- **System prompt**: replaces the default base prompt when non-empty. Blank or whitespace-only values fall back to the default behavior.
 - **Debug logging**: prints selection, canvas write, and ACP protocol diagnostics to the developer console.
 
 ## Commands
