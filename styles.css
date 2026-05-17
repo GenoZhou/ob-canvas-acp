@@ -24,6 +24,36 @@
 	font-size: var(--font-ui-smaller);
 }
 
+.canvas-acp-system-prompt-setting {
+	flex-wrap: wrap;
+}
+
+.canvas-acp-system-prompt-setting .setting-item-info {
+	flex: 1 1 auto;
+}
+
+.canvas-acp-system-prompt-setting .setting-item-control {
+	flex: 0 0 auto;
+}
+
+.canvas-acp-default-prompt {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	margin-top: 4px;
+	margin-bottom: 0;
+}
+
+.canvas-acp-system-prompt-textarea {
+	flex-basis: 100%;
+	order: 3;
+	width: 100%;
+	min-height: 120px;
+	margin-top: 8px;
+	resize: vertical;
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+}
+
 .canvas-acp-thinking {
 	display: flex;
 	align-items: center;

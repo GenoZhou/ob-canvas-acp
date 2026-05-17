@@ -1,5 +1,6 @@
 import {App, PluginSettingTab, Setting} from "obsidian";
 import CanvasAcpPlugin from "./main";
+import {DEFAULT_SYSTEM_PROMPT} from "./workflow";
 
 export interface CanvasAcpSettings {
 	agentCommand: string;
@@ -74,16 +75,33 @@ export class CanvasAcpSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 
-		new Setting(containerEl)
+		const systemPromptSetting = new Setting(containerEl)
 			.setName("System prompt")
-			.setDesc("Replaces the default base prompt when non-empty. Blank or whitespace-only values fall back to the default behavior.")
-			.addTextArea((text) => text
-				.setPlaceholder("Enter a custom system prompt...")
-				.setValue(this.plugin.settings.systemPrompt)
-				.onChange(async (value) => {
-					this.plugin.settings.systemPrompt = value;
+			.setDesc("Replaces the default base prompt when non-empty. Blank or whitespace-only values fall back to the default.")
+			.addExtraButton((button) => button
+				.setIcon("reset")
+				.setTooltip("Reset to default")
+				.onClick(async () => {
+					this.plugin.settings.systemPrompt = "";
 					await this.plugin.saveSettings();
+					textArea.value = "";
 				}));
+
+		systemPromptSetting.settingEl.addClass("canvas-acp-system-prompt-setting");
+
+		systemPromptSetting.descEl.createEl("p", {
+			cls: "canvas-acp-default-prompt",
+			text: `Default: ${DEFAULT_SYSTEM_PROMPT}`,
+		});
+
+		const textArea = systemPromptSetting.settingEl.createEl("textarea");
+		textArea.classList.add("canvas-acp-system-prompt-textarea");
+		textArea.placeholder = "Enter a custom system prompt...";
+		textArea.value = this.plugin.settings.systemPrompt;
+		textArea.addEventListener("input", () => {
+			this.plugin.settings.systemPrompt = textArea.value;
+			void this.plugin.saveSettings();
+		});
 
 		new Setting(containerEl)
 			.setName("Debug logging")
