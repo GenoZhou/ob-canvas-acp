@@ -13,6 +13,10 @@ import {debugError, debugLog} from "./debug";
 
 const CONTEXT_DIVIDER = "\n\n--- Context ---\n";
 const THINKING_TAG_REGEX = /<think>[\s\S]*?<\/think>/gi;
+export const DEFAULT_SYSTEM_PROMPT = [
+	"You are helping expand an Obsidian canvas graph.",
+	"Answer the user's question using the provided canvas node as context.",
+].join("\n");
 
 export async function askQuestionFromCanvasSelection(app: App, settings: CanvasAcpSettings): Promise<void> {
 	debugLog("workflow", "command invoked");
@@ -113,7 +117,7 @@ class AskQuestionModal extends Modal {
 				questionLength: question.length,
 				selection: summarizeSelection(this.canvasSource),
 			});
-			const prompt = this.promptPreview || buildPrompt(this.canvasSource, question, this.includeThinking);
+			const prompt = this.promptPreview || buildPrompt(this.canvasSource, question, this.includeThinking, this.settings.systemPrompt);
 			const basePath = getVaultBasePath(this.app);
 			debugLog("workflow", "vault base path resolved", {
 				basePath,
@@ -186,7 +190,7 @@ class AskQuestionModal extends Modal {
 
 		const contextDivider = CONTEXT_DIVIDER;
 		const updatePrompt = () => {
-			const prompt = buildPrompt(this.canvasSource, this.question, this.includeThinking);
+			const prompt = buildPrompt(this.canvasSource, this.question, this.includeThinking, this.settings.systemPrompt);
 			const context = this.canvasSource.sourceText ?? "";
 			this.promptPreview = prompt;
 			promptTextarea.value = [prompt, contextDivider, context].join("");
@@ -286,10 +290,14 @@ function createThrottledCanvasUpdate(app: App, target: CanvasTextNodeTarget): {
 	};
 }
 
-export function buildPrompt(selection: SelectedCanvasSource, question: string, includeThinking: boolean): string {
+export function buildPrompt(
+	selection: SelectedCanvasSource,
+	question: string,
+	includeThinking: boolean,
+	systemPrompt = "",
+): string {
 	const parts = [
-		"You are helping expand an Obsidian canvas graph.",
-		"Answer the user's question using the provided canvas node as context.",
+		systemPrompt.trim() || DEFAULT_SYSTEM_PROMPT,
 	];
 
 	if (selection.upstreamContext) {
