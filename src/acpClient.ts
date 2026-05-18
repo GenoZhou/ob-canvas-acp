@@ -94,7 +94,7 @@ export class AcpClient {
 					terminal: false,
 				},
 				clientInfo: {
-					name: "ob-canvas-acp",
+					name: "canvas-acp",
 					title: "Canvas ACP",
 					version: "1.0.0",
 				},

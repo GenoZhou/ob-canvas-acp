@@ -48,7 +48,7 @@ The plugin sends only the selected node content, upstream context, and your ques
 - Run `npm run dev` to compile in watch mode.
 - Run `npm run build` before publishing.
 - Run `npm test` to execute the test suite.
-- Copy `main.js`, `styles.css`, and `manifest.json` into `VaultFolder/.obsidian/plugins/ob-canvas-acp/` for manual testing.
+- Copy `main.js`, `styles.css`, and `manifest.json` into `VaultFolder/.obsidian/plugins/canvas-acp/` for manual testing.
 
 ## Acknowledgments
 
