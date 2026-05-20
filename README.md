@@ -38,9 +38,11 @@ Configure in **Settings → Canvas ACP**:
 
 Assign a shortcut in **Settings → Hotkeys**.
 
-## Privacy
+## Privacy and security
 
 The plugin sends only the selected node content, upstream context, and your question to the ACP agent process you configure. It does not make hidden network requests or collect telemetry. Any network access depends on the configured agent.
+
+To talk to ACP, the plugin spawns the **agent command** you set in settings (without a shell). That process runs with your user permissions, so only configure commands you trust. Vault access uses Obsidian APIs (`vault.read`, `vault.modify`, and related helpers), not arbitrary filesystem paths outside the vault.
 
 ## Development
 
@@ -58,10 +60,10 @@ The plugin sends only the selected node content, upstream context, and your ques
 ## Release
 
 - Run `npm run verify` for a local test/lint pass during development.
-- Run `npm run prepublish` before manual release checks; it builds, tests, lints, and validates release artifacts.
+- Run `npm run release:check` before manual release checks; it builds, tests, lints, and validates release artifacts.
 - Prepare the next prerelease with `npm run prerelease`. Publish it with `npm run release:prerelease`.
 - Prepare the next stable release with `npm run release:prepare`. Publish it with `npm run release:stable`.
 - There is intentionally no `npm run release` alias, because npm would run the `prerelease` lifecycle hook before it.
 - Release scripts update `package.json`, `package-lock.json`, `manifest.json`, and `versions.json`.
 - Publish scripts commit the version bump, create a semver tag without a `v` prefix, push `main` plus the tag, and run `npm run verify:release -- <version>`.
-- GitHub Actions creates the GitHub Release from the pushed tag and attaches `manifest.json`, `main.js`, and `styles.css`.
+- GitHub Actions creates the GitHub Release from the pushed tag and attaches `manifest.json`, `main.js`, and `styles.css`. CI also generates artifact attestations for `main.js` and `styles.css`; verify with `gh attestation verify main.js -R GenoZhou/canvas-acp` after downloading a release asset.

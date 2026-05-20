@@ -45,8 +45,11 @@ function checkManifest() {
 	const filePath = path.join(rootDir, "manifest.json");
 	if (!fs.existsSync(filePath)) return;
 	const manifest = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-	const missingFields = ["id", "name", "version", "minAppVersion"].filter((field) => !(field in manifest));
+	const missingFields = ["id", "name", "version", "minAppVersion", "author"].filter((field) => !(field in manifest));
 	if (missingFields.length) fail(`manifest.json missing fields: ${missingFields.join(", ")}`);
+	if (!String(manifest.author ?? "").trim()) {
+		fail("manifest.json author must be a non-empty string");
+	}
 
 	const packagePath = path.join(rootDir, "package.json");
 	if (fs.existsSync(packagePath)) {

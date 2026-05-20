@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+import fs from "fs";
+import os from "os";
+import path from "path";
 import { spawnSync } from "child_process";
 
 const args = process.argv.slice(2);
@@ -40,6 +43,7 @@ function verifyGitHubReleaseOrWorkflow(tag, tagSha) {
 
 	if (commandSucceeds("gh", ["release", "view", tag, "--repo", repo])) {
 		console.log(`GitHub Release ${tag} exists on ${repo}.`);
+		verifyReleaseManifest(tag, tagSha, repo);
 		return;
 	}
 
@@ -63,6 +67,33 @@ function verifyGitHubReleaseOrWorkflow(tag, tagSha) {
 	}
 	console.log(`Release workflow status for ${tag}: ${run.status}${run.conclusion ? `/${run.conclusion}` : ""}`);
 	console.log(run.url);
+}
+
+const MANIFEST_COMPARE_FIELDS = [
+	"id",
+	"name",
+	"version",
+	"minAppVersion",
+	"description",
+	"author",
+	"authorUrl",
+	"isDesktopOnly",
+];
+
+function verifyReleaseManifest(tag, tagSha, repo) {
+	const tagManifest = JSON.parse(commandOutputStrict("git", ["show", `${tagSha}:manifest.json`]));
+	const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "canvas-acp-release-"));
+	try {
+		run("gh", ["release", "download", tag, "--repo", repo, "-p", "manifest.json", "-D", tempDir]);
+		const releaseManifest = JSON.parse(fs.readFileSync(path.join(tempDir, "manifest.json"), "utf-8"));
+		const mismatched = MANIFEST_COMPARE_FIELDS.filter((field) => tagManifest[field] !== releaseManifest[field]);
+		if (mismatched.length) {
+			fail(`Release manifest.json differs from tag ${tag} for: ${mismatched.join(", ")}`);
+		}
+		console.log(`Release manifest.json matches tag ${tag}.`);
+	} finally {
+		fs.rmSync(tempDir, {recursive: true, force: true});
+	}
 }
 
 function getRemoteTagSha(tag) {

@@ -1,5 +1,8 @@
 name: Node.js build
 
+env:
+    FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
     push:
         branches: ["**"]
@@ -25,4 +28,3 @@ jobs:
             - run: npm ci
             - run: npm run build --if-present
             - run: npm run lint
-

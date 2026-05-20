@@ -15,7 +15,7 @@
 - Install: `npm install`.
 - Development watch: `npm run dev`.
 - Cheap local verification: `npm run verify`.
-- Full release gate: `npm run prepublish`.
+- Full release gate: `npm run release:check`.
 - Tests only: `npm test`.
 - Lint only: `npm run lint`.
 - Production build: `npm run build`.
@@ -73,8 +73,10 @@ This repo follows the shared `release-flow` pattern.
 
 There is intentionally no `npm run release` alias. npm would treat `prerelease` as a lifecycle hook and could run the wrong preparation path before a stable publish.
 
-Release scripts update `package.json`, `package-lock.json`, `manifest.json`, and `versions.json`, run `npm run prepublish`, then publish scripts commit the version bump, create a semver tag without a `v` prefix, push `main` plus the tag, and run `verify:release`.
+Release scripts update `package.json`, `package-lock.json`, `manifest.json`, and `versions.json`, run `npm run release:check`, then publish scripts commit the version bump, create a semver tag without a `v` prefix, push `main` plus the tag, and run `verify:release`.
 
-GitHub Actions creates the GitHub Release from the pushed tag and attaches `manifest.json`, `main.js`, and `styles.css`. Do not also create a local `gh release` unless recovering from a failed workflow.
+Do not add a `prepublish` npm script. npm also runs that lifecycle during install, which wastes time and can make dependency setup noisy. Keep release verification behind the explicit `release:check` script.
+
+GitHub Actions creates the GitHub Release from the pushed tag and attaches `manifest.json`, `main.js`, and `styles.css`. The release workflow also attests `main.js` and `styles.css` with `actions/attest`. Keep `manifest.json` `author` / `authorUrl` populated; `check-dist` rejects an empty author. Do not also create a local `gh release` unless recovering from a failed workflow.
 
 Before release work, re-check current tags, version files, branch, remote, and workflow status. After a publish command, use the single `verify:release` path instead of rerunning the full gate unless there is a concrete reason.

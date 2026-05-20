@@ -54,7 +54,7 @@ function main() {
 	ensureVersionAvailable(nextVersion);
 
 	updateVersions(nextVersion);
-	run("npm", ["run", "prepublish"]);
+	run("npm", ["run", "release:check"]);
 
 	console.log(`\nPrepared prerelease ${nextVersion}.`);
 	if (shouldPublish) publish(nextVersion);

@@ -37,7 +37,7 @@ export class CanvasAcpSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Agent command")
-			.setDesc("Path to the configured agent command, for example node or gemini.")
+			.setDesc("Runs only the executable you configure here (no shell). Use a trusted agent binary, such as node or an absolute path to your adapter.")
 			.addText((text) => text
 				.setPlaceholder("/opt/homebrew/bin/node")
 				.setValue(this.plugin.settings.agentCommand)

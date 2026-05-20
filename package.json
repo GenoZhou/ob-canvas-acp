@@ -9,7 +9,7 @@
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"verify": "npm test && npm run lint",
-		"prepublish": "npm run build && npm test && npm run lint && npm run check-dist",
+		"release:check": "npm run build && npm test && npm run lint && npm run check-dist",
 		"prerelease": "node scripts/prerelease.mjs",
 		"release:prepare": "node scripts/release.mjs",
 		"release:prerelease": "node scripts/prerelease.mjs --publish",
