@@ -9,6 +9,7 @@ permissions:
     contents: write
     id-token: write
     attestations: write
+    artifact-metadata: write
 
 env:
     FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -29,15 +30,12 @@ jobs:
             - run: npm ci
             - run: npm run release:check
 
-            - name: Attest main.js
-              uses: actions/attest@v2
+            - name: Attest release artifacts
+              uses: actions/attest@v4
               with:
-                  subject-path: main.js
-
-            - name: Attest styles.css
-              uses: actions/attest@v2
-              with:
-                  subject-path: styles.css
+                  subject-path: |
+                      main.js
+                      styles.css
 
             - name: Create GitHub Release
               env:
