@@ -5,6 +5,17 @@ import os from "os";
 import path from "path";
 import { spawnSync } from "child_process";
 
+const MANIFEST_COMPARE_FIELDS = [
+	"id",
+	"name",
+	"version",
+	"minAppVersion",
+	"description",
+	"author",
+	"authorUrl",
+	"isDesktopOnly",
+];
+
 const args = process.argv.slice(2);
 const remoteName = readArg("--remote") || "origin";
 
@@ -68,17 +79,6 @@ function verifyGitHubReleaseOrWorkflow(tag, tagSha) {
 	console.log(`Release workflow status for ${tag}: ${run.status}${run.conclusion ? `/${run.conclusion}` : ""}`);
 	console.log(run.url);
 }
-
-const MANIFEST_COMPARE_FIELDS = [
-	"id",
-	"name",
-	"version",
-	"minAppVersion",
-	"description",
-	"author",
-	"authorUrl",
-	"isDesktopOnly",
-];
 
 function verifyReleaseManifest(tag, tagSha, repo) {
 	const tagManifest = JSON.parse(commandOutputStrict("git", ["show", `${tagSha}:manifest.json`]));
